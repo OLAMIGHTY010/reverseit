@@ -1,0 +1,27 @@
+[
+  {
+    "bank": "GTBank",
+    "channel": "atm",
+    "alert_text": "GTBank: Your account ending in 4521 has been debited NGN15,000.00 on 13/10/2026 at 09:15 via ATM. Ref: GTB20261013001."
+  },
+  {
+    "bank": "FirstBank",
+    "channel": "pos",
+    "alert_text": "FirstBank Debit Alert: NGN8,500.50 was withdrawn from your account ******6789 via POS on 2026-10-12 16:30 at SUPER MART. Reference: FBK123456789."
+  },
+  {
+    "bank": "AccessBank",
+    "channel": "transfer",
+    "alert_text": "AccessBank Notification: Transfer of NGN3,200.00 to account 0123456789 completed on 12-Oct-2026 at 10:30 via transfer. Reference: ACC20261012TRF."
+  },
+  {
+    "bank": "ZenithBank",
+    "channel": "web",
+    "alert_text": "Zenith Bank Alert: Your card ending in 1234 was used for a web payment of NGN12,400.00 on 10/10/2026 at 22:45. Transaction ID: ZBWEB20261010001."
+  },
+  {
+    "bank": "UBA",
+    "channel": "transfer",
+    "alert_text": "UBA Mobile Money: NGN500.00 sent to ******1122 via Transfer on 13-10-2026 14:05. Ref: UBAUSSD131026."
+  }
+]
