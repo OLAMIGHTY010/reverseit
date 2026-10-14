@@ -7,6 +7,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi import FastAPI, Depends, HTTPException, Query, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -30,6 +31,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(title="ReverseIt", lifespan=lifespan)
+
+# Allow frontend consumption (Vite, React, Vanilla JS, etc.)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ------------------ Request / Response Schemas ------------------ #
@@ -91,6 +101,15 @@ def list_disputes(status_filter: str | None = Query(None, alias="status"), db: S
         query = query.filter(Dispute.status == status_filter)
     disputes = query.order_by(Dispute.id.desc()).all()
     return [d.to_dict() for d in disputes]
+
+
+@app.get("/disputes/{dispute_id}")
+def get_dispute(dispute_id: int, db: Session = Depends(get_db)):
+    """GET /disputes/{id}: Retrieve a single dispute by ID."""
+    dispute = db.query(Dispute).filter(Dispute.id == dispute_id).first()
+    if not dispute:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dispute not found")
+    return dispute.to_dict()
 
 
 @app.patch("/disputes/{dispute_id}")

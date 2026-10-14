@@ -140,6 +140,11 @@ def test_create_and_list_dispute(client):
     assert len(disputes) == 1
     assert disputes[0]["id"] == created["id"]
 
+    # 2b. GET /disputes/{id}
+    single_res = client.get(f"/disputes/{created['id']}")
+    assert single_res.status_code == 200
+    assert single_res.json()["reference"] == "FBK123456789"
+
     # 3. PATCH /disputes/{id}
     patch_res = client.patch(f"/disputes/{created['id']}", json={"status": "resolved"})
     assert patch_res.status_code == 200
