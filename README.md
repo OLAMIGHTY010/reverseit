@@ -1,68 +1,132 @@
-# Alert Parsing Implementation Plan
+# ReverseIt
 
-## Goal
-Turn a pasted debit alert into structured fields.
+ReverseIt helps a Nigerian bank customer challenge a debit they did not
+authorise. It has two components:
 
-## Core Function
+1. **Alert parsing** - a pasted debit alert (SMS or email) becomes a
+   structured dispute record.
+2. **Letter generation** - the dispute record becomes a formal complaint to
+   the bank and, if the bank does not resolve it, an escalation to the Central
+   Bank of Nigeria (CBN).
+
+This branch covers the **letters, the test set and the docs**.
+
+## Core function
+
 ```python
-def parse_alert(text: str) -> dict:
-    ...
+from app.letters import generate_letter
+
+letter = generate_letter("bank", dispute)   # "bank" or "cbn"
 ```
 
-### Success Response
-```json
-{
-  "amount": 20000,
-  "date": "2026-10-13",
-  "time": "14:05",
-  "channel": "pos",
-  "bank": "ExampleBank",
-  "reference": "12345"
+`generate_letter(kind, dispute) -> str` fills one of two templates from the
+dispute record, then optionally asks an LLM to polish the wording. It only
+returns text that contains **no unfilled `{placeholder}`**.
+
+`generate_letters(dispute)` returns both letters keyed by kind.
+
+## The placeholder contract
+
+Both letters are built from the same six placeholders. Nothing else is allowed
+in a template.
+
+| Placeholder | Meaning | Example |
+| --- | --- | --- |
+| `{amount}` | disputed amount | `NGN 20,000` |
+| `{date}` | date of the debit | `2026-10-13` |
+| `{channel}` | how it happened | `a point-of-sale (POS) transaction` |
+| `{bank}` | the customer's bank | `ExampleBank` |
+| `{reference}` | transaction reference | `12345` |
+| `{deadline}` | date the bank must reply by | `2026-10-27` |
+
+So a dispute record looks like this:
+
+```python
+dispute = {
+    "amount": 20000,
+    "date": "2026-10-13",
+    "channel": "pos",
+    "bank": "ExampleBank",
+    "reference": "12345",
+    "deadline": "2026-10-27",
 }
 ```
 
-### Failure Response
-```json
-{
-  "error": "could_not_parse",
-  "missing": ["amount", "reference"]
-}
+`channel` accepts `atm`, `pos`, `transfer` or `web` (the values the alert
+parser emits) and renders as readable prose. A missing or blank field raises
+`MissingDisputeFieldError` rather than producing a letter with a placeholder in
+it.
+
+### Keeping the LLM honest
+
+The polish step may only improve grammar, tone and flow. Before any polished
+text is returned it is checked:
+
+- no `{placeholder}` is left;
+- every dispute fact still appears;
+- no new amount or date was introduced;
+- no legal or regulatory claim appears that was not already in the letter.
+
+If any check fails, the deterministic template letter is returned instead. The
+module therefore works with **no API key at all**.
+
+## Install
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env             # optional: add ANTHROPIC_API_KEY for polish
 ```
 
-**Note:** `channel` must be one of: `atm`, `pos`, `transfer`, `web`.
+## Run
 
-## Tasks
+```bash
+# End-to-end demo: dispute record -> both letters
+python demo.py
 
-### 1. Write 5 invented alert formats
-- Create 5 sample debit alerts from different banks (no real customer data)
-- For each, list the fields it contains (amount, date, time, channel, bank, reference)
-- Share with Workstream 4
+# Tests
+python -m pytest -q
 
-### 2. Step 1: Write regex rules (Working Version)
-- Implement regex-based extraction that parses the sample alerts
-- This is the initial working version
+# API server (skeleton)
+uvicorn app.main:app --reload
+```
 
-### 3. Step 2: Add LLM Fallback
-- For alerts the regex misses, ask a language model for strict JSON output
-- Validate the model's response in code:
-  - `amount` must be a number
-  - `date` must be a real date
-  - `channel` must be one of `atm`, `pos`, `transfer`, `web`
-- If validation fails, return the `could_not_parse` result
+## Folder layout
 
-### 4. Requirements
-- Never crash on bad input
-- Always return a result in one of the two shapes above (success or failure)
+```
+.
+├── app/
+│   ├── __init__.py
+│   ├── letters.py          # generate_letter(): templates + guarded LLM polish
+│   └── main.py             # FastAPI app skeleton
+├── data/
+│   └── sample_alerts/      # 13 invented debit alerts + index (parser input)
+├── docs/
+│   └── alert_parsing_plan.md
+├── tests/
+│   ├── test_letters.py     # pytest suite for the letters
+│   ├── test_main.py        # pytest suite for the API skeleton
+│   └── test_table.md       # manual test table: input, expected, actual, pass/fail
+├── demo.py                 # demo script
+├── requirements.txt
+└── .env.example
+```
 
-### 5. Testing
-- Test every sample alert and record pass/fail
-- **Success criterion**: `parse_alert` correctly handles at least 80% of the sample alerts
-- For the remaining alerts, return a clean `could_not_parse` result
+## Environment
 
-## Due Dates
-- **Regex version**: Wednesday noon
-- **LLM fallback**: Wednesday night
-- **Stretch goal** (if finished early): Screenshot upload support
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `ANTHROPIC_API_KEY` | no | enables the LLM polish step |
+| `ANTHROPIC_MODEL` | no | overrides the model name |
+| `HOST`, `PORT`, `ENVIRONMENT` | no | server settings |
 
----
-*This document outlines the specification for the alert parsing component of the ReverseIt project.*
+**Never commit an API key.** `.env` is git-ignored; only `.env.example` is
+tracked, and it holds no secrets. Without `ANTHROPIC_API_KEY` the letters are
+generated from the templates unchanged.
+
+## Related documents
+
+- [Alert parsing plan](docs/alert_parsing_plan.md)
+- [Test table](tests/test_table.md)
+- [Sample alerts](data/sample_alerts/README.md)
