@@ -1,68 +1,56 @@
-# Alert Parsing Implementation Plan
+# ReverseIt Alert Parser
 
-## Goal
-Turn a pasted debit alert into structured fields.
+ReverseIt parses Nigerian bank transaction alerts using a regex parser first
+and a Groq-powered LLM fallback when regex cannot confidently parse an alert.
 
-## Core Function
-```python
-def parse_alert(text: str) -> dict:
-    ...
+## Setup
+
+You need Python 3.10 or newer and your own Groq API key to use the LLM fallback.
+Each person running the project must create and use their own key; do not share
+or commit API keys.
+
+1. Clone the repository and move into its directory.
+2. Create and activate a virtual environment:
+
+   ```bash
+   python3 -m venv .venv
+   source .venv/bin/activate
+   ```
+
+3. Install the project dependencies:
+
+   ```bash
+   python -m pip install -r requirements.txt
+   ```
+
+4. Create a `.env` file in the project root and add your own key:
+
+   ```dotenv
+   GROQ_API_KEY=your_groq_api_key_here
+   ```
+
+   Replace `your_groq_api_key_here` with your key from Groq. The `.env` file is
+   ignored by Git; keep it private and never commit it.
+
+## Run
+
+With the virtual environment activated and `.env` configured, run:
+
+```bash
+python parse.py
 ```
 
-### Success Response
-```json
-{
-  "amount": 20000,
-  "date": "2026-10-13",
-  "time": "14:05",
-  "channel": "pos",
-  "bank": "ExampleBank",
-  "reference": "12345"
-}
+This runs the parser against the sample alerts in `parse.py`. The LLM fallback
+requires a valid `GROQ_API_KEY`; without one, regex parsing may still succeed,
+but alerts that need the fallback will not be parsed by the LLM.
+
+## Test
+
+Run the parser tests with:
+
+```bash
+python test_parser.py
 ```
 
-### Failure Response
-```json
-{
-  "error": "could_not_parse",
-  "missing": ["amount", "reference"]
-}
-```
-
-**Note:** `channel` must be one of: `atm`, `pos`, `transfer`, `web`.
-
-## Tasks
-
-### 1. Write 5 invented alert formats
-- Create 5 sample debit alerts from different banks (no real customer data)
-- For each, list the fields it contains (amount, date, time, channel, bank, reference)
-- Share with Workstream 4
-
-### 2. Step 1: Write regex rules (Working Version)
-- Implement regex-based extraction that parses the sample alerts
-- This is the initial working version
-
-### 3. Step 2: Add LLM Fallback
-- For alerts the regex misses, ask a language model for strict JSON output
-- Validate the model's response in code:
-  - `amount` must be a number
-  - `date` must be a real date
-  - `channel` must be one of `atm`, `pos`, `transfer`, `web`
-- If validation fails, return the `could_not_parse` result
-
-### 4. Requirements
-- Never crash on bad input
-- Always return a result in one of the two shapes above (success or failure)
-
-### 5. Testing
-- Test every sample alert and record pass/fail
-- **Success criterion**: `parse_alert` correctly handles at least 80% of the sample alerts
-- For the remaining alerts, return a clean `could_not_parse` result
-
-## Due Dates
-- **Regex version**: Wednesday noon
-- **LLM fallback**: Wednesday night
-- **Stretch goal** (if finished early): Screenshot upload support
-
----
-*This document outlines the specification for the alert parsing component of the ReverseIt project.*
+The tests use a stubbed LLM response to verify that the fallback path is called
+without sending requests to Groq or requiring an API key.

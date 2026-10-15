@@ -1,246 +1,179 @@
+import math
 import re
 from datetime import datetime
 
-def parse_alert(text: str) -> dict:
-    """
-    Parse a debit alert SMS to extract amount, date, time, channel, bank, and reference.
-    Returns a dict either with the six fields (on success) or with error and missing fields (on failure).
-    """
-    if not isinstance(text, str):
-        return {"error": "could_not_parse", "missing": ["amount", "date", "time", "channel", "bank", "reference"]}
 
-    # Step 1: Try regex extraction
-    extracted = _extract_with_regex(text)
-    missing, invalid = _validate_extracted(extracted)
+KNOWN_BANKS = {
+    "access": "Access Bank",
+    "gtb": "GTBank",
+    "gtbank": "GTBank",
+    "guaranty trust": "GTBank",
+    "zenith": "Zenith Bank",
+    "first bank": "First Bank",
+    "fbn": "First Bank",
+    "uba": "UBA",
+    "united bank for africa": "UBA",
+    "opay": "OPay",
+    "palmpay": "PalmPay",
+    "kuda": "Kuda Bank",
+    "moniepoint": "Moniepoint",
+    "stanbic": "Stanbic IBTC",
+    "fcmb": "FCMB",
+    "sterling": "Sterling Bank",
+    "wema": "Wema Bank",
+    "alat": "Wema Bank",
+    "fidelity": "Fidelity Bank",
+    "union": "Union Bank",
+}
 
-    # If any missing or invalid, treat as not fully parsed
-    if not missing and not invalid:
-        # All fields present and valid, normalize and return
-        return _normalize_output(extracted)
-
-    # If we have missing or invalid fields, return error
-    # Combine missing and invalid into a single list of fields that are not good
-    not_good = list(set(missing + invalid))
-    return {"error": "could_not_parse", "missing": not_good}
-
-
-def _extract_with_regex(text: str) -> dict:
-    """Extract fields using regex patterns."""
-    result = {}
-
-    # Amount: look for currency patterns
-    amount_patterns = [
-        r'(?:NGN|₦)\s*([\d,]+\.?\d*)',  # NGN1,234.56 or ₦1,234.56
-        r'([\d,]+\.?\d*)\s*(?:NGN|₦)',  # 1,234.56 NGN
-        r'([\d,]+\.?\d*)'               # fallback: just numbers with commas/decimal
-    ]
-
-    for pattern in amount_patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            amount_str = match.group(1).replace(',', '')
-            try:
-                result['amount'] = float(amount_str)
-                break
-            except ValueError:
-                pass
-
-    # Date: try multiple formats
-    date_patterns = [
-        r'(\d{2}[/-]\d{2}[/-]\d{4})',         # DD/MM/YYYY or DD-MM-YYYY
-        r'(\d{4}[/-]\d{2}[/-]\d{2})',         # YYYY-MM-DD
-        r'(\d{2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*-\d{4})',   # DD-Mon-YYYY
-        r'(\d{2})\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4})',  # DD Month YYYY
-        r'(\d{2})\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{4})',  # DD Month YYYY (groups)
-    ]
-
-    for pattern in date_patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            if match.lastindex == 2:  # DD Month YYYY with two groups
-                day, month_str, year = match.group(1), match.group(2), match.group(3)
-                # Convert month string to number
-                month_map = {
-                    'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04', 'may': '05', 'jun': '06',
-                    'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
-                }
-                month = month_map.get(month_str.lower()[:3], '01')
-                result['date_raw'] = f"{year}-{month}-{day.zfill(2)}"
-            else:
-                date_str = match.group(0)
-                # Try to normalize the date string to YYYY-MM-DD
-                # We'll try to parse it with known formats
-                for fmt in ('%d/%m/%Y', '%d-%m-%Y', '%Y/%m/%d', '%Y-%m-%d'):
-                    try:
-                        parsed = datetime.strptime(date_str, fmt)
-                        result['date_raw'] = parsed.strftime('%Y-%m-%d')
-                        break
-                    except ValueError:
-                        continue
-                # If we didn't break, we might not have parsed correctly
-                if 'date_raw' not in result:
-                    # As a fallback, we'll use the string as is and hope validation catches it
-                    result['date_raw'] = date_str
-            break
-
-    # Time: look for HH:MM or HH:MM:SS
-    time_patterns = [
-        r'(\d{2}:\d{2})',      # HH:MM
-        r'(\d{2}:\d{2}:\d{2})' # HH:MM:SS
-    ]
-
-    for pattern in time_patterns:
-        match = re.search(pattern, text)
-        if match:
-            time_str = match.group(1)
-            # If we have HH:MM:SS, we'll keep only HH:MM for simplicity
-            if len(time_str) == 8:
-                result['time_raw'] = time_str[:5]
-            else:
-                result['time_raw'] = time_str
-            break
-
-    # Channel: look for atm, pos, transfer, web (case insensitive)
-    channel_patterns = [
-        r'\b(atm|pos|transfer|web)\b'
-    ]
-
-    for pattern in channel_patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            result['channel'] = match.group(1).lower()
-            break
-
-    # Bank: look for the bank name after certain prepositions, excluding channel words.
-    # Bank name must start with a letter.
-    bank_patterns = [
-        r'(?:from|at|via|through|with)\s+((?!(?:atm|pos|transfer|web)\b)[A-Za-z][A-Za-z0-9]*)',
-    ]
-
-    for pattern in bank_patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            result['bank'] = match.group(1).strip()
-            break
-
-    # Reference: look for Ref:, Reference:, Transaction ID:, ID, etc.
-    ref_patterns = [
-        r'\b(?:Ref|Reference)\b\s*:?\s*([A-Za-z0-9]+)',
-        r'\b(?:Transaction\s*ID|Trans\s*ID|ID)\b\s*:?\s*([A-Za-z0-9]+)',
-        r'\b([A-Za-z0-9]{6,})\b(?=\s*$)'  # alphanumeric at least 6 chars at end (fallback)
-    ]
-
-    for pattern in ref_patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            result['reference'] = match.group(1)
-            break
-
-    return result
+_CREDIT_PATTERN = re.compile(
+    r"\bcredit\s+alert\b|\bcr\s*:|\bcredited\s+with\b|"
+    r"\breceived\s+from\b|\bcredit\s+of\b",
+    re.IGNORECASE,
+)
+_OUTGOING_PATTERN = re.compile(
+    r"\b(?:debit(?:ed)?|dr|withdraw(?:n|al)?|spent|paid|purchase|payment|"
+    r"transfer\s+sent|sent\s+to)\b",
+    re.IGNORECASE,
+)
+_CURRENCY = r"(?:ngn|₦|(?<![A-Za-z])n(?![A-Za-z]))"
+_DEBIT_AMOUNT_PATTERN = re.compile(
+    r"\b(?:amt|amount|debit|dr|debited|spent|paid)\s*:?\s*"
+    rf"{_CURRENCY}?\s*([\d,]+(?:\.\d{{1,2}})?)",
+    re.IGNORECASE,
+)
+_CURRENCY_AMOUNT_PATTERN = re.compile(
+    rf"{_CURRENCY}\s*([\d,]+(?:\.\d{{1,2}})?)",
+    re.IGNORECASE,
+)
+_BALANCE_PREFIX_PATTERN = re.compile(
+    r"(?:available\s+bal|avail\s+bal|balance|bal)\s*:?\s*"
+    rf"{_CURRENCY}?\s*$",
+    re.IGNORECASE,
+)
 
 
-def _validate_extracted(extracted: dict) -> tuple[list[str], list[str]]:
-    """Validate extracted fields. Return (missing_fields, invalid_fields)."""
-    missing = []
-    invalid = []
+def _parse_amount(text: str) -> float | None:
+    for match in _DEBIT_AMOUNT_PATTERN.finditer(text):
+        amount = _to_amount(match.group(1))
+        if amount is not None:
+            return amount
 
-    # Amount
-    if 'amount' not in extracted:
-        missing.append('amount')
-    else:
-        # Already float from extraction, but ensure it's a number
-        if not isinstance(extracted['amount'], (int, float)):
-            try:
-                extracted['amount'] = float(extracted['amount'])
-            except (ValueError, TypeError):
-                invalid.append('amount')
-
-    # Date
-    if 'date_raw' not in extracted:
-        missing.append('date')
-    else:
-        date_str = extracted['date_raw']
-        parsed_date = _parse_date(date_str)
-        if parsed_date is None:
-            invalid.append('date')
-        else:
-            extracted['date'] = parsed_date  # Store normalized date
-
-    # Time
-    if 'time_raw' not in extracted:
-        missing.append('time')
-    else:
-        time_str = extracted['time_raw']
-        if not _validate_time(time_str):
-            invalid.append('time')
-        else:
-            extracted['time'] = time_str  # Already in HH:MM format (we assume)
-
-    # Channel
-    if 'channel' not in extracted:
-        missing.append('channel')
-    else:
-        channel = extracted['channel']
-        if channel not in ['atm', 'pos', 'transfer', 'web']:
-            invalid.append('channel')
-
-    # Bank
-    if 'bank' not in extracted:
-        missing.append('bank')
-    else:
-        if not isinstance(extracted['bank'], str) or not extracted['bank'].strip():
-            invalid.append('bank')
-
-    # Reference
-    if 'reference' not in extracted:
-        missing.append('reference')
-    else:
-        if not isinstance(extracted['reference'], str) or not extracted['reference'].strip():
-            invalid.append('reference')
-
-    return missing, invalid
-
-
-def _parse_date(date_str: str) -> str | None:
-    """Try to parse date string and return YYYY-MM-DD or None."""
-    # List of formats to try
-    formats = [
-        '%d/%m/%Y',
-        '%d-%m-%Y',
-        '%Y/%m/%d',
-        '%Y-%m-%d',
-        '%d %b %Y',
-        '%d %B %Y',
-        '%d-%b-%Y',
-        '%d-%B-%Y',
-    ]
-
-    for fmt in formats:
-        try:
-            parsed = datetime.strptime(date_str, fmt)
-            return parsed.strftime('%Y-%m-%d')
-        except ValueError:
+    for match in _CURRENCY_AMOUNT_PATTERN.finditer(text):
+        prefix = text[max(0, match.start() - 60):match.start()]
+        if _BALANCE_PREFIX_PATTERN.search(prefix):
             continue
+        amount = _to_amount(match.group(1))
+        if amount is not None:
+            return amount
     return None
 
 
-def _validate_time(time_str: str) -> bool:
-    """Validate time string in HH:MM format."""
-    if not re.match(r'^([01]\d|2[0-3]):([0-5]\d)$', time_str):
-        return False
-    return True
+def _to_amount(raw: str) -> float | None:
+    try:
+        amount = float(raw.replace(",", ""))
+    except ValueError:
+        return None
+    return amount if math.isfinite(amount) and amount > 0 else None
 
 
-def _normalize_output(extracted: dict) -> dict:
-    """Normalize the extracted fields to the output format."""
-    # We have already normalized date and time in validation, but we'll do it again for safety.
-    # The extracted dict should have: amount, date, time, channel, bank, reference
-    # We'll return a new dict with these fields.
+def _parse_date(text: str) -> str | None:
+    patterns = (
+        (r"\b(\d{4}-\d{1,2}-\d{1,2})\b", ("%Y-%m-%d",)),
+        (
+            r"\b(\d{1,2}/\d{1,2}/\d{4})\b",
+            ("%d/%m/%Y",),
+        ),
+        (
+            r"\b(\d{1,2}-(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
+            r"[a-z]*-\d{4})\b",
+            ("%d-%b-%Y", "%d-%B-%Y"),
+        ),
+        (
+            r"\b(\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
+            r"[a-z]*\s+\d{4})\b",
+            ("%d %b %Y", "%d %B %Y"),
+        ),
+    )
+    for pattern, formats in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            continue
+        for date_format in formats:
+            try:
+                return datetime.strptime(match.group(1), date_format).strftime("%Y-%m-%d")
+            except ValueError:
+                continue
+        return None
+    return None
+
+
+def _parse_time(text: str) -> str | None:
+    match = re.search(
+        r"(?<!\d)(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?(?![A-Za-z])",
+        text,
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+    hour, minute = int(match.group(1)), int(match.group(2))
+    meridiem = (match.group(3) or "").upper()
+    if minute > 59:
+        return None
+    if meridiem:
+        if not 1 <= hour <= 12:
+            return None
+        hour = hour % 12 + (12 if meridiem == "PM" else 0)
+    elif hour > 23:
+        return None
+    return f"{hour:02d}:{minute:02d}"
+
+
+def _parse_channel(text: str) -> str | None:
+    match = re.search(r"\b(atm|pos|transfer|web)\b", text, re.IGNORECASE)
+    return match.group(1).lower() if match else None
+
+
+def _parse_bank(text: str) -> str:
+    for keyword in sorted(KNOWN_BANKS, key=len, reverse=True):
+        if re.search(rf"(?<![A-Za-z0-9]){re.escape(keyword)}(?![A-Za-z0-9])", text, re.IGNORECASE):
+            return KNOWN_BANKS[keyword]
+    return "Unknown"
+
+
+def _parse_reference(text: str) -> str | None:
+    match = re.search(
+        r"\b(?:transaction\s*id|trans\s*id|reference|ref|id)\b"
+        r"\s*:?\s*([A-Za-z0-9][A-Za-z0-9-]*)",
+        text,
+        re.IGNORECASE,
+    )
+    if match:
+        return match.group(1)
+    match = re.search(r"\b([A-Za-z0-9]{6,})\b\s*[.!]?\s*$", text)
+    return match.group(1) if match else None
+
+
+def parse_with_regex(text: str) -> dict | None:
+    """Extract a complete outgoing transaction alert, or return None."""
+    if not isinstance(text, str) or not text.strip():
+        return None
+    if _CREDIT_PATTERN.search(text) or not _OUTGOING_PATTERN.search(text):
+        return None
+
+    amount = _parse_amount(text)
+    date = _parse_date(text)
+    time = _parse_time(text)
+    channel = _parse_channel(text)
+    reference = _parse_reference(text)
+    if amount is None or date is None or time is None or channel is None or reference is None:
+        return None
+
     return {
-        'amount': extracted['amount'],
-        'date': extracted['date'],
-        'time': extracted['time'],
-        'channel': extracted['channel'],
-        'bank': extracted['bank'],
-        'reference': extracted['reference']
+        "amount": amount,
+        "date": date,
+        "time": time,
+        "channel": channel,
+        "bank": _parse_bank(text),
+        "reference": reference,
     }

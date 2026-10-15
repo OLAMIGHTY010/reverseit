@@ -1,0 +1,15 @@
+# Never commit virtual environments
+venv/
+env/
+.venv/
+
+# Never commit secret keys
+.env
+
+# Never commit python cache
+__pycache__/
+*.pyc
+
+# Editor configs
+.vscode/
+.idea/

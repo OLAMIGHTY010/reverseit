@@ -1,4 +1,7 @@
-from regex_parser import parse_alert
+from unittest.mock import call, patch
+
+import parse
+from regex_parser import parse_with_regex
 
 # Define the sample alerts and expected results
 samples = [
@@ -60,41 +63,41 @@ samples = [
 ]
 
 def test_parse_alert():
-    passed = 0
-    total = len(samples)
-    for i, sample in enumerate(samples, start=1):
-        result = parse_alert(sample["alert"])
-        print(f"Sample {i}:")
-        print(f"  Alert: {sample['alert']}")
-        print(f"  Result: {result}")
-        if "error" in result:
-            print(f"  Status: FAILED (error)")
-            print(f"  Missing: {result.get('missing', [])}")
-        else:
-            # Compare each field
-            mismatches = []
-            for key, expected_val in sample["expected"].items():
-                if key not in result:
-                    mismatches.append(f"{key}: missing")
-                else:
-                    actual_val = result[key]
-                    # For amount, we might have float vs int, but we expect float in expected
-                    if isinstance(expected_val, float) and isinstance(actual_val, float):
-                        if abs(expected_val - actual_val) > 0.001:
-                            mismatches.append(f"{key}: expected {expected_val}, got {actual_val}")
-                    else:
-                        if expected_val != actual_val:
-                            mismatches.append(f"{key}: expected {expected_val}, got {actual_val}")
-            if mismatches:
-                print(f"  Status: FAILED (mismatch)")
-                for m in mismatches:
-                    print(f"    - {m}")
-            else:
-                print(f"  Status: PASSED")
-                passed += 1
-        print()
-    print(f"Passed {passed}/{total} tests")
-    return passed == total
+    expected_by_alert = {sample["alert"]: sample["expected"] for sample in samples}
+
+    def fake_llm_fallback(alert):
+        return expected_by_alert[alert]
+
+    with patch("parse.parse_with_llm", side_effect=fake_llm_fallback) as llm_fallback:
+        for sample in samples:
+            alert = sample["alert"]
+            expected = sample["expected"]
+
+            regex_result = parse_with_regex(alert)
+            assert regex_result is not None
+            assert regex_result["bank"] == "Unknown"
+            assert {
+                key: value for key, value in regex_result.items() if key != "bank"
+            } == {
+                key: value for key, value in expected.items() if key != "bank"
+            }
+
+            assert parse.parse_alert(alert) == expected
+
+    assert llm_fallback.call_args_list == [call(sample["alert"]) for sample in samples]
+
+
+def test_llm_fallback_when_regex_fails():
+    sample = samples[0]
+    with (
+        patch("parse.parse_with_regex", return_value=None),
+        patch("parse.parse_with_llm", return_value=sample["expected"]) as llm_fallback,
+    ):
+        assert parse.parse_alert(sample["alert"]) == sample["expected"]
+        llm_fallback.assert_called_once_with(sample["alert"])
+
 
 if __name__ == "__main__":
     test_parse_alert()
+    test_llm_fallback_when_regex_fails()
+    print(f"Passed {len(samples)}/{len(samples)} regex + LLM fallback tests")
