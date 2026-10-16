@@ -63,6 +63,51 @@ export const ExceptionsView: React.FC = () => {
   const [isFeedStale, setIsFeedStale] = useState(false);
   const [newIncomingItemsCount, setNewIncomingItemsCount] = useState<number>(0);
 
+  // Live synchronization: fetch latest from apiClient on mount and listen for real-time customer postings
+  useEffect(() => {
+    let isMounted = true;
+    const fetchLatest = async () => {
+      setIsLoading(true);
+      try {
+        const latest = await apiClient.getExceptions();
+        if (isMounted) {
+          setExceptions(latest);
+        }
+      } catch {
+        // silent
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    fetchLatest();
+
+    const handleLiveDispute = (event: Event) => {
+      const customEvent = event as CustomEvent<FinancialException>;
+      const newExc = customEvent.detail;
+      if (newExc) {
+        setExceptions((prev) => {
+          if (prev.some((e) => e.id === newExc.id || e.reference === newExc.reference)) {
+            return prev;
+          }
+          return [newExc, ...prev];
+        });
+        setNewIncomingItemsCount((prev) => prev + 1);
+        addToast({
+          type: 'info',
+          title: 'Live Customer Dispute Received',
+          message: `Case ${newExc.reference} (${newExc.currency} ${newExc.amount}) is now live on the triage queue.`,
+        });
+      }
+    };
+
+    window.addEventListener('smartreversal:new_exception', handleLiveDispute);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('smartreversal:new_exception', handleLiveDispute);
+    };
+  }, [addToast]);
+
   // Active saved view tab
   const [activeTab, setActiveTab] = useState<SavedViewTab>('TRIAGE');
 
@@ -458,19 +503,23 @@ export const ExceptionsView: React.FC = () => {
   };
 
   // Reload action for conflict or simulated new items
-  const handleReload = () => {
+  const handleReload = async () => {
     setIsLoading(true);
-    setTimeout(() => {
-      setExceptions([...INITIAL_EXCEPTIONS]);
+    try {
+      const latest = await apiClient.getExceptions();
+      setExceptions(latest);
       setNewIncomingItemsCount(0);
       setConflictData(null);
-      setIsLoading(false);
       addToast({
         type: 'info',
         title: 'Feed Refreshed',
-        message: 'Synchronized latest reconciliation exceptions.',
+        message: 'Synchronized live exceptions and customer disputes.',
       });
-    }, 400);
+    } catch {
+      // silent
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Sort toggle helper
