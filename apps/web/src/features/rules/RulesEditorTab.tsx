@@ -67,7 +67,7 @@ block_blacklisted_beneficiaries: ${form.blockBlacklistedBeneficiaries}
               Decision Rules & SLA Thresholds Editor
             </h3>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-mono-financial">
-              Screen 12 • Hot-Reload Engine
+              Hot-Reload Engine
             </span>
           </div>
           <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
