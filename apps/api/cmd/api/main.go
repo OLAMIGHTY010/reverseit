@@ -111,8 +111,8 @@ func run() error {
 	killService := &killswitch.Service{Audit: appender}
 	txnService := &txn.Service{}
 	routingService := &routing.Service{Audit: appender}
-	reconService := &reconciliation.Service{Pool: pool, Audit: appender}
 	caseService := &cases.Service{Audit: appender, Config: configService, Routing: routingService, OnClose: labels.OnClose}
+	reconService := &reconciliation.Service{Pool: pool, Cases: caseService}
 	// Execution is simulated: the sources below are the synthetic ones. No real
 	// provider adapter exists in this build.
 	var customerLogin *customer.Login
