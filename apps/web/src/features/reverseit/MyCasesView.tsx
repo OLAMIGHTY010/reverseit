@@ -1,10 +1,14 @@
+import React, { useState } from 'react';
 import {
   Clock,
   ArrowRight,
   Plus,
+  Search,
+  AlertCircle,
 } from 'lucide-react';
 import { Button } from '../../components/Button';
 import type { CustomerDisputeCase } from './reverseitTypes';
+import { INITIAL_CUSTOMER_CASES } from './reverseitData';
 
 export interface MyCasesViewProps {
   cases: CustomerDisputeCase[];
@@ -17,6 +21,37 @@ export const MyCasesView: React.FC<MyCasesViewProps> = ({
   onSelectCase,
   onStartNewReport,
 }) => {
+  const [trackingQuery, setTrackingQuery] = useState('');
+  const [lookupError, setLookupError] = useState<string | null>(null);
+
+  const handleLookup = (e: React.FormEvent) => {
+    e.preventDefault();
+    const query = trackingQuery.trim().toLowerCase();
+    if (!query) return;
+
+    // Search within customer's own reports first, then match by exact tracking ID / Case reference
+    const found =
+      cases.find(
+        (c) =>
+          c.caseNumber.toLowerCase() === query ||
+          c.trackingId.toLowerCase() === query ||
+          c.reference.toLowerCase() === query
+      ) ||
+      INITIAL_CUSTOMER_CASES.find(
+        (c) =>
+          c.caseNumber.toLowerCase() === query ||
+          c.trackingId.toLowerCase() === query ||
+          c.reference.toLowerCase() === query
+      );
+
+    if (found) {
+      setLookupError(null);
+      onSelectCase(found);
+    } else {
+      setLookupError('No dispute case found matching that Tracking ID or Case Reference.');
+    }
+  };
+
   return (
     <div className="max-w-3xl mx-auto py-4 px-4 space-y-6 animate-in fade-in duration-200">
       {/* Title & Action */}
@@ -39,7 +74,39 @@ export const MyCasesView: React.FC<MyCasesViewProps> = ({
         </Button>
       </div>
 
-      {/* Cases List */}
+      {/* Private Tracking Lookup by Reference / Tracking ID */}
+      <div className="p-4 bg-[var(--surface)] border border-[var(--surface-border)] rounded-xl space-y-2">
+        <label htmlFor="tracking-search-input" className="block text-xs font-semibold text-[var(--text-primary)]">
+          Track a Case by Tracking ID or Reference Number
+        </label>
+        <form onSubmit={handleLookup} className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-[var(--text-muted)] absolute left-3 top-2.5 pointer-events-none" />
+            <input
+              id="tracking-search-input"
+              type="text"
+              value={trackingQuery}
+              onChange={(e) => {
+                setTrackingQuery(e.target.value);
+                setLookupError(null);
+              }}
+              placeholder="e.g. TRK-990142 or CUS-2026-004417"
+              className="w-full pl-9 pr-3 py-2 text-xs bg-[var(--canvas-subdued)] border border-[var(--surface-border)] rounded-md font-mono-financial focus:outline-none focus:border-[var(--primary)] text-[var(--text-primary)]"
+            />
+          </div>
+          <Button variant="secondary" size="sm" type="submit">
+            Track
+          </Button>
+        </form>
+        {lookupError && (
+          <div className="flex items-center gap-1.5 text-xs text-rose-600 mt-1">
+            <AlertCircle className="w-3.5 h-3.5" />
+            <span>{lookupError}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Cases List (Only displays this customer's own reports) */}
       {cases.length === 0 ? (
         <div className="p-12 text-center bg-[var(--surface)] border border-[var(--surface-border)] rounded-xl space-y-3">
           <Clock className="w-12 h-12 mx-auto text-slate-300" />
