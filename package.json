@@ -9,6 +9,8 @@
     "packages/api-contracts"
   ],
   "scripts": {
+    "dev": "node scripts/dev-all.mjs",
+    "dev:all": "node scripts/dev-all.mjs",
     "dev:web": "npm run dev --workspace=apps/web",
     "build:web": "npm run build --workspace=apps/web",
     "build:ui": "npm run build --workspace=packages/ui",

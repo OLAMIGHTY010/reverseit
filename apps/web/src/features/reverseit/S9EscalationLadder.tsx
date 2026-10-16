@@ -5,6 +5,7 @@ import {
   Phone,
   Copy,
   Check,
+  ShieldAlert,
 } from 'lucide-react';
 import { Button } from '../../components/Button';
 import type { CustomerDisputeCase } from './reverseitTypes';
@@ -30,7 +31,7 @@ export const S9EscalationLadder: React.FC<S9EscalationLadderProps> = ({
     {
       step: 1,
       title: 'Tier 1: Bank Transaction Dispute Desk',
-      owner: 'Customer Care & Exception Desk',
+      owner: 'Customer Care & Exception Operations Unit',
       email: 'disputes@wemabank.com / purpleconnect@wemabank.com',
       phone: '0700-225-52528 (0700-ALAT-ALAT)',
       description:
@@ -60,34 +61,42 @@ export const S9EscalationLadder: React.FC<S9EscalationLadderProps> = ({
   ];
 
   return (
-    <div className="max-w-2xl mx-auto py-4 px-4 space-y-6 animate-in fade-in duration-200">
+    <div className="max-w-2xl mx-auto py-2 px-2 sm:px-4 space-y-6 animate-in fade-in duration-200">
+      {/* Back button */}
       <button
         type="button"
         onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium cursor-pointer"
+        className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium transition-colors cursor-pointer"
       >
         <ArrowLeft className="w-4 h-4" />
         <span>Back to case timeline</span>
       </button>
 
       {/* Screen Title */}
-      <div>
-        <h2 className="text-[20px] font-bold text-[var(--text-primary)]">
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-100 text-rose-800">
+            Escalation Hierarchy
+          </span>
+          <span className="text-[12px] text-[var(--text-muted)]">Official Recourse Channels</span>
+        </div>
+        <h1 className="text-[22px] font-bold text-[var(--text-primary)]">
           Official 3-Step Escalation Ladder
-        </h2>
-        <p className="text-[13px] text-[var(--text-muted)] mt-1">
+        </h1>
+        <p className="text-[13px] text-[var(--text-secondary)]">
           If your transaction exceeds the statutory deadline without verified refund or credit advice, 
-          follow this approved hierarchy in order.
+          follow this approved hierarchy in sequential order.
         </p>
       </div>
 
       {/* Case Quick Pill */}
-      <div className="p-3 bg-[var(--surface)] border border-[var(--surface-border)] rounded-lg flex items-center justify-between text-[12px]">
+      <div className="p-4 bg-[var(--surface)] border border-[var(--surface-border)] rounded-2xl flex flex-wrap items-center justify-between gap-3 text-[12px] shadow-2xs">
         <div className="font-mono-financial text-[var(--text-secondary)]">
-          Disputing: <strong>{disputeCase.caseNumber}</strong> ({disputeCase.currency} {disputeCase.amount})
+          Disputing Case: <strong className="text-[var(--text-primary)]">{disputeCase.caseNumber}</strong> ({disputeCase.currency} {disputeCase.amount})
         </div>
-        <span className="font-semibold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-          Escalation Pack Ready
+        <span className="font-bold text-rose-800 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200 flex items-center gap-1">
+          <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+          <span>Escalation Pack Ready</span>
         </span>
       </div>
 
@@ -96,41 +105,41 @@ export const S9EscalationLadder: React.FC<S9EscalationLadderProps> = ({
         {steps.map((s) => (
           <div
             key={s.step}
-            className="p-5 bg-[var(--surface)] border border-[var(--surface-border)] rounded-xl shadow-xs space-y-3"
+            className="p-5 sm:p-6 bg-[var(--surface)] border border-[var(--surface-border)] rounded-2xl shadow-xs space-y-3.5"
           >
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-[12px]">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div className="flex items-center gap-3">
+                <span className="w-7 h-7 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-[12px] shadow-2xs">
                   {s.step}
                 </span>
-                <h3 className="text-[14px] font-bold text-[var(--text-primary)]">
+                <h2 className="text-[15px] font-bold text-[var(--text-primary)]">
                   {s.title}
-                </h3>
+                </h2>
               </div>
-              <span className="text-[11px] font-semibold text-slate-500 uppercase">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
                 {s.owner}
               </span>
             </div>
 
-            <p className="text-[12px] text-[var(--text-muted)] leading-relaxed">
+            <p className="text-[12px] text-[var(--text-secondary)] leading-relaxed pl-10">
               {s.description}
             </p>
 
-            <div className="p-3 rounded-lg bg-[var(--canvas-subdued)] space-y-1.5 text-[11px] font-mono-financial text-[var(--text-secondary)]">
+            <div className="ml-10 p-3.5 rounded-xl bg-[var(--canvas-subdued)] space-y-2 text-[11px] font-mono-financial text-[var(--text-secondary)] border border-[var(--surface-border-subtle)]">
               <div className="flex items-center gap-2">
-                <Mail className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-                <span>{s.email}</span>
+                <Mail className="w-4 h-4 text-sky-600 shrink-0" />
+                <span className="truncate">{s.email}</span>
               </div>
               <div className="flex items-center gap-2">
-                <Phone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <Phone className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>{s.phone}</span>
               </div>
             </div>
 
             {/* Template & Copy Button */}
-            <div className="flex items-center justify-between pt-1">
+            <div className="ml-10 flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[var(--surface-border-subtle)]">
               <span className="text-[11px] text-[var(--text-muted)]">
-                Pre-formatted escalation notice ready
+                Pre-formatted escalation message ready
               </span>
               <Button
                 size="xs"
@@ -138,7 +147,7 @@ export const S9EscalationLadder: React.FC<S9EscalationLadderProps> = ({
                 onClick={() => handleCopyText(s.step, s.template)}
                 leftIcon={copiedStep === s.step ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
               >
-                {copiedStep === s.step ? 'Copied' : 'Copy Message Text'}
+                {copiedStep === s.step ? 'Copied to Clipboard!' : 'Copy Notice Message'}
               </Button>
             </div>
           </div>
