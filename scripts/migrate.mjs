@@ -20,7 +20,18 @@ import net from 'node:net';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const ROOT_DIR = __dirname;
+
+function findRootDir(startDir) {
+  let curr = startDir;
+  while (curr && curr !== dirname(curr)) {
+    if (existsSync(resolve(curr, 'apps')) && existsSync(resolve(curr, 'package.json'))) {
+      return curr;
+    }
+    curr = dirname(curr);
+  }
+  return startDir;
+}
+const ROOT_DIR = findRootDir(__dirname);
 const API_DIR = resolve(ROOT_DIR, 'apps/api');
 
 // ANSI color helpers
