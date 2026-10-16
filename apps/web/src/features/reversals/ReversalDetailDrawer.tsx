@@ -47,7 +47,7 @@ export const ReversalDetailDrawer: React.FC<ReversalDetailDrawerProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h2 id="reversal-detail-title" className="text-[15px] font-bold text-[var(--text-primary)]">
-                  Screen 8: Reversal Proposal Audit Dossier
+                  Reversal Proposal Audit Dossier
                 </h2>
                 <StatusBadge status={detail.status} size="sm" />
               </div>
@@ -213,7 +213,7 @@ export const ReversalDetailDrawer: React.FC<ReversalDetailDrawerProps> = ({
               onClick={onProceedToAuthorize}
               rightIcon={<ArrowRight className="w-4 h-4" />}
             >
-              {isChecker ? 'Proceed to Authorization (Screen 11)' : 'Review Dual-Control Details'}
+              {isChecker ? 'Proceed to Authorization' : 'Review Dual-Control Details'}
             </Button>
           )}
         </div>
