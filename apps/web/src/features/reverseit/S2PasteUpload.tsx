@@ -124,7 +124,7 @@ export const S2PasteUpload: React.FC<S2PasteUploadProps> = ({
       <div className="p-3 bg-[var(--surface)] border border-[var(--surface-border)] rounded-lg space-y-2">
         <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
           <span>Quick Test Presets (Top Nigerian Banks)</span>
-          <span className="text-sky-700 font-sans">Prompt A9 Regex Verified</span>
+          <span className="text-sky-700 font-sans">Verified Format Parser</span>
         </div>
         <div className="flex flex-wrap gap-2">
           {SAMPLE_NIGERIAN_ALERTS.map((sample, i) => (
