@@ -59,7 +59,6 @@ func NewRouter(o Options) http.Handler {
 	r.Route("/v1", func(v1 chi.Router) {
 		v1.Get("/health", h.live)
 		v1.Get("/ready", h.ready)
-		v1.Get("/metrics", observability.DefaultRegistry.Handler())
 
 		if o.Auth != nil {
 			ar := &authRoutes{auth: o.Auth, logger: o.Logger}
@@ -194,6 +193,11 @@ func NewRouter(o Options) http.Handler {
 				}
 				if o.Services.Vault != nil {
 					pr.Post("/accounts/unmask", o.Services.unmask)
+				}
+				if o.Services.Reconciliation != nil {
+					pr.Post("/settlement-files", o.Services.uploadSettlementFile)
+					pr.Get("/reconciliation/breaks", o.Services.listReconBreaks)
+					pr.Post("/reconciliation/breaks/{id}/pair", o.Services.pairReconBreak)
 				}
 			}
 		})

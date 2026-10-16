@@ -215,9 +215,10 @@ type OpenInput struct {
 
 // Service creates and changes cases.
 type Service struct {
-	Audit  *audit.Appender
-	Config *configsvc.Service
-	Now    func() time.Time
+	Audit   *audit.Appender
+	Config  *configsvc.Service
+	Routing *routing.Service
+	Now     func() time.Time
 	// OnClose, when set, is called inside the transition's transaction after a case
 	// reaches a terminal status. It must not change the case. An error stops the
 	// transition.

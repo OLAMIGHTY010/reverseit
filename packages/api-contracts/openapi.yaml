@@ -69,23 +69,6 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Ready' }
-  /v1/metrics:
-    get:
-      tags: [Platform]
-      operationId: getMetrics
-      summary: Prometheus metrics endpoint
-      description: |
-        Exposes system, transaction, exception, reversal, SLA and circuit breaker
-        metrics in standard Prometheus text exposition format.
-      x-status: implemented
-      security: []
-      responses:
-        '200':
-          description: Metrics text exposition.
-          content:
-            text/plain:
-              schema:
-                type: string
 
   /v1/auth/login:
     post:
