@@ -5,6 +5,8 @@ import {
   Plus,
   Search,
   AlertCircle,
+  Sparkles,
+  ShieldCheck,
 } from 'lucide-react';
 import { Button } from '../../components/Button';
 import type { CustomerDisputeCase } from './reverseitTypes';
@@ -23,6 +25,10 @@ export const MyCasesView: React.FC<MyCasesViewProps> = ({
 }) => {
   const [trackingQuery, setTrackingQuery] = useState('');
   const [lookupError, setLookupError] = useState<string | null>(null);
+  const [demoCases, setDemoCases] = useState<CustomerDisputeCase[]>([]);
+
+  // Combined list: real cases from session + any loaded demo cases
+  const displayedCases = [...cases, ...demoCases];
 
   const handleLookup = (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,7 +37,7 @@ export const MyCasesView: React.FC<MyCasesViewProps> = ({
 
     // Search within customer's own reports first, then match by exact tracking ID / Case reference
     const found =
-      cases.find(
+      displayedCases.find(
         (c) =>
           c.caseNumber.toLowerCase() === query ||
           c.trackingId.toLowerCase() === query ||
@@ -52,16 +58,20 @@ export const MyCasesView: React.FC<MyCasesViewProps> = ({
     }
   };
 
+  const handleLoadSampleCases = () => {
+    setDemoCases(INITIAL_CUSTOMER_CASES);
+  };
+
   return (
-    <div className="max-w-3xl mx-auto py-4 px-4 space-y-6 animate-in fade-in duration-200">
+    <div className="max-w-3xl mx-auto py-2 px-2 sm:px-4 space-y-6 animate-in fade-in duration-200">
       {/* Title & Action */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-[20px] font-bold text-[var(--text-primary)]">
-            My Dispute Cases ({cases.length})
-          </h2>
-          <p className="text-[13px] text-[var(--text-muted)] mt-0.5">
-            Real-time status tracking and Central Bank of Nigeria (CBN) resolution clocks.
+          <h1 className="text-[22px] font-bold text-[var(--text-primary)]">
+            My Dispute Cases ({displayedCases.length})
+          </h1>
+          <p className="text-[13px] text-[var(--text-secondary)] mt-0.5">
+            Real-time status tracking, switch queries, and Central Bank of Nigeria (CBN) resolution clocks.
           </p>
         </div>
         <Button
@@ -70,13 +80,13 @@ export const MyCasesView: React.FC<MyCasesViewProps> = ({
           onClick={onStartNewReport}
           leftIcon={<Plus className="w-4 h-4" />}
         >
-          Report Another Issue
+          Report New Dispute
         </Button>
       </div>
 
       {/* Private Tracking Lookup by Reference / Tracking ID */}
-      <div className="p-4 bg-[var(--surface)] border border-[var(--surface-border)] rounded-xl space-y-2">
-        <label htmlFor="tracking-search-input" className="block text-xs font-semibold text-[var(--text-primary)]">
+      <div className="p-4 bg-[var(--surface)] border border-[var(--surface-border)] rounded-2xl space-y-2 shadow-2xs">
+        <label htmlFor="tracking-search-input" className="block text-xs font-bold text-[var(--text-primary)]">
           Track a Case by Tracking ID or Reference Number
         </label>
         <form onSubmit={handleLookup} className="flex gap-2">
@@ -91,11 +101,11 @@ export const MyCasesView: React.FC<MyCasesViewProps> = ({
                 setLookupError(null);
               }}
               placeholder="e.g. TRK-990142 or CUS-2026-004417"
-              className="w-full pl-9 pr-3 py-2 text-xs bg-[var(--canvas-subdued)] border border-[var(--surface-border)] rounded-md font-mono-financial focus:outline-none focus:border-[var(--primary)] text-[var(--text-primary)]"
+              className="w-full pl-9 pr-3 py-2 text-xs bg-[var(--canvas-subdued)] border border-[var(--surface-border)] rounded-xl font-mono-financial focus:outline-none focus:border-[var(--primary)] text-[var(--text-primary)]"
             />
           </div>
           <Button variant="secondary" size="sm" type="submit">
-            Track
+            Search
           </Button>
         </form>
         {lookupError && (
@@ -106,67 +116,86 @@ export const MyCasesView: React.FC<MyCasesViewProps> = ({
         )}
       </div>
 
-      {/* Cases List (Only displays this customer's own reports) */}
-      {cases.length === 0 ? (
-        <div className="p-12 text-center bg-[var(--surface)] border border-[var(--surface-border)] rounded-xl space-y-3">
-          <Clock className="w-12 h-12 mx-auto text-slate-300" />
-          <h3 className="text-[16px] font-bold text-[var(--text-primary)]">
-            No active disputes filed
-          </h3>
-          <p className="text-[13px] text-[var(--text-muted)] max-w-sm mx-auto">
-            You currently have no open transaction investigations. Report an alert anytime something goes wrong.
-          </p>
-          <Button variant="primary" size="md" onClick={onStartNewReport}>
-            Report a Transaction Problem
-          </Button>
+      {/* Cases List */}
+      {displayedCases.length === 0 ? (
+        <div className="p-8 sm:p-12 text-center bg-[var(--surface)] border border-[var(--surface-border)] rounded-2xl space-y-4 shadow-xs">
+          <div className="w-14 h-14 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center mx-auto">
+            <Clock className="w-8 h-8" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-[17px] font-bold text-[var(--text-primary)]">
+              No active disputes filed yet
+            </h2>
+            <p className="text-[13px] text-[var(--text-muted)] max-w-sm mx-auto leading-relaxed">
+              Whenever money leaves your account without value, report your debit alert here to initiate an automated investigation.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <Button variant="primary" size="md" onClick={onStartNewReport}>
+              Report a Transaction Problem &rarr;
+            </Button>
+            <Button
+              variant="secondary"
+              size="md"
+              onClick={handleLoadSampleCases}
+              leftIcon={<Sparkles className="w-4 h-4 text-sky-600" />}
+            >
+              Load Interactive Demo Cases
+            </Button>
+          </div>
         </div>
       ) : (
-        <div className="space-y-3">
-          {cases.map((c) => (
+        <div className="space-y-3.5">
+          {displayedCases.map((c) => (
             <div
               key={c.id}
               onClick={() => onSelectCase(c)}
-              className="p-5 bg-[var(--surface)] border border-[var(--surface-border)] hover:border-sky-500 rounded-xl shadow-xs hover:shadow-sm transition-all cursor-pointer space-y-3 group"
+              className="p-5 bg-[var(--surface)] border border-[var(--surface-border)] hover:border-sky-500 rounded-2xl shadow-xs hover:shadow-md transition-all cursor-pointer space-y-3.5 group"
             >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-[15px] font-mono-financial text-[var(--text-primary)] group-hover:text-sky-700">
+                    <span className="font-extrabold text-[15px] font-mono-financial text-[var(--text-primary)] group-hover:text-sky-700 transition-colors">
                       {c.caseNumber}
                     </span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-sky-100 text-sky-800">
-                      {c.channel}
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-sky-100 text-sky-800">
+                      {c.channel} Channel
+                    </span>
+                    <span className="text-[11px] font-mono-financial text-[var(--text-muted)]">
+                      {c.trackingId}
                     </span>
                   </div>
-                  <div className="text-[12px] font-mono-financial text-[var(--text-muted)] mt-0.5">
-                    Ref: {c.reference} &bull; Reported {new Date(c.reportedAt).toLocaleDateString()}
+                  <div className="text-[12px] font-mono-financial text-[var(--text-muted)]">
+                    Ref: <span className="text-[var(--text-secondary)]">{c.reference}</span> &bull; Reported {new Date(c.reportedAt).toLocaleDateString()}
                   </div>
                 </div>
 
                 <div className="text-right">
-                  <span className="text-[18px] font-bold font-mono-financial text-[var(--text-primary)] block">
+                  <span className="text-[20px] font-extrabold font-mono-financial text-[var(--text-primary)] block">
                     {c.currency} {c.amount}
                   </span>
-                  <span className="text-[11px] font-semibold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
+                  <span className="text-[11px] font-semibold text-sky-800 bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-200 inline-block mt-0.5">
                     {c.statusLabel}
                   </span>
                 </div>
               </div>
 
-              {/* Status summary line */}
-              <p className="text-[12px] text-[var(--text-secondary)] line-clamp-1">
-                {c.customerSafeStatusText}
-              </p>
+              {/* Status summary box */}
+              <div className="p-3 rounded-xl bg-[var(--canvas-subdued)] border border-[var(--surface-border-subtle)] text-[12px] text-[var(--text-secondary)] flex items-start gap-2.5">
+                <ShieldCheck className="w-4 h-4 text-sky-700 shrink-0 mt-0.5" />
+                <span className="leading-relaxed">{c.customerSafeStatusText}</span>
+              </div>
 
               {/* Countdown & details pill */}
               <div className="flex items-center justify-between pt-2 border-t border-[var(--surface-border-subtle)] text-[11px]">
-                <div className="flex items-center gap-1.5 font-semibold text-sky-700">
+                <div className="flex items-center gap-1.5 font-bold text-sky-700">
                   <Clock className="w-3.5 h-3.5" />
                   <span>{c.timeRemainingText}</span>
                 </div>
-                <span className="text-sky-600 group-hover:underline flex items-center gap-1 font-medium">
-                  <span>Track lifecycle</span>
-                  <ArrowRight className="w-3 h-3" />
+                <span className="text-sky-600 group-hover:translate-x-1 transition-transform flex items-center gap-1 font-semibold">
+                  <span>Track lifecycle & escalation</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </span>
               </div>
             </div>
