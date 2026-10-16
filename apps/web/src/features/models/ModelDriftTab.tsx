@@ -23,7 +23,7 @@ export const ModelDriftTab: React.FC<ModelDriftTabProps> = ({ models, driftMetri
             </span>
           </div>
           <span className="text-[11px] font-mono-financial text-[var(--text-muted)]">
-            Screen 17 • Benchmark against Baseline
+            Benchmark against Baseline
           </span>
         </div>
 
