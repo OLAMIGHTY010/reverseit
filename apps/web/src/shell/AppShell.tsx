@@ -11,7 +11,6 @@ import {
   BookOpen,
   LogOut,
   ChevronDown,
-  Layers,
   ArrowLeftRight,
   Shield,
 } from 'lucide-react';
