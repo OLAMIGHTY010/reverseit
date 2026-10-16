@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { AppShell } from './shell/AppShell';
+import { CustomerShell } from './shell/CustomerShell';
+import { StaffLoginView } from './features/auth/StaffLoginView';
 import { DashboardView } from './features/DashboardView';
 import { TransactionsView } from './features/TransactionsView';
 import { ReconciliationView } from './features/ReconciliationView';
@@ -50,12 +52,39 @@ const MainViewRouter: React.FC = () => {
   }
 };
 
+const CustomerPortal: React.FC = () => {
+  return (
+    <CustomerShell>
+      <ReverseItView />
+    </CustomerShell>
+  );
+};
+
+const AppContent: React.FC = () => {
+  const { portalMode, isAuthenticated } = useApp();
+
+  // 1. Customer Self-Service Portal (Completely segregated from bank operations)
+  if (portalMode === 'customer') {
+    return <CustomerPortal />;
+  }
+
+  // 2. Bank Staff Operations Portal (Requires staff authentication)
+  if (!isAuthenticated) {
+    return <StaffLoginView />;
+  }
+
+  // 3. Authenticated Bank Operations Console
+  return (
+    <AppShell>
+      <MainViewRouter />
+    </AppShell>
+  );
+};
+
 export function App() {
   return (
     <AppProvider>
-      <AppShell>
-        <MainViewRouter />
-      </AppShell>
+      <AppContent />
     </AppProvider>
   );
 }
