@@ -88,6 +88,12 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
 
   const allowedPrimaryItems = primaryNavItems.filter((item) => item.roles.includes(role));
 
+  const governanceNavItems = [
+    { id: 'rules-health', label: 'Rules & Integration Health', desc: 'Active rules, adapter circuits & switch uptime' },
+    { id: 'executive-reports', label: 'Executive Reports & Heatmap', desc: 'Dispute exposure & SLA regulatory summaries' },
+    { id: 'model-drift', label: 'ML Drift & Shadow Matrix', desc: 'Predictive precision, explainability & drift metrics' },
+  ];
+
   const roleLabels: Record<Role, string> = {
     ANALYST_MAKER: 'Analyst Maker',
     SUPERVISOR_CHECKER: 'Supervisor Checker',

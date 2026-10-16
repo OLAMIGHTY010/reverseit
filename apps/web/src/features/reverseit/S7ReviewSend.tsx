@@ -7,8 +7,6 @@ import {
   CheckCircle2,
   Clock,
   ShieldCheck,
-  FileText,
-  Building,
 } from 'lucide-react';
 import { Button } from '../../components/Button';
 import type {
@@ -35,7 +33,7 @@ export const S7ReviewSend: React.FC<S7ReviewSendProps> = ({
   onBack,
   onComplaintSubmitted,
 }) => {
-  const [activeTab, setActiveTab] = useState<'summary' | 'letter'>('summary');
+  const [activeTab] = useState<'summary' | 'letter'>('summary');
   const generatedCaseId = `CUS-2026-${Math.floor(100000 + Math.random() * 900000)}`;
 
   // Fact-checked complaint template generator
