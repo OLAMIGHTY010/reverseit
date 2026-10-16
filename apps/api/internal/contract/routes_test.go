@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"github.com/smartreversal/smartreversal/apps/api/internal/alerts"
+	"github.com/smartreversal/smartreversal/apps/api/internal/incidents"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,6 +16,8 @@ import (
 	"github.com/smartreversal/smartreversal/apps/api/internal/cases"
 	"github.com/smartreversal/smartreversal/apps/api/internal/configsvc"
 	"github.com/smartreversal/smartreversal/apps/api/internal/correlate"
+	"github.com/smartreversal/smartreversal/apps/api/internal/creport"
+	"github.com/smartreversal/smartreversal/apps/api/internal/customer"
 	"github.com/smartreversal/smartreversal/apps/api/internal/datashield"
 	"github.com/smartreversal/smartreversal/apps/api/internal/feed"
 	"github.com/smartreversal/smartreversal/apps/api/internal/identity"
@@ -35,7 +39,7 @@ func routerOperations(t *testing.T) map[string]bool {
 		// A non-nil authenticator mounts the login route.
 		Auth: &identity.Authenticator{},
 		// Non-nil services mount the routes that need a database and a policy.
-		Services:        &server.Services{Pool: &db.Pool{}, Policy: &authz.Policy{}, Audit: &audit.Appender{}, Vault: &datashield.Vault{}, Config: &configsvc.Service{}, KillSwitch: &killswitch.Service{}, Txn: &txn.Service{}, Feed: &feed.Importer{}, Correlate: &correlate.Matcher{}, Rules: &rules.Engine{}, Cases: &cases.Service{}, Reversal: &reversal.Service{}},
+		Services:        &server.Services{Pool: &db.Pool{}, Policy: &authz.Policy{}, Audit: &audit.Appender{}, Vault: &datashield.Vault{}, Config: &configsvc.Service{}, KillSwitch: &killswitch.Service{}, Txn: &txn.Service{}, Feed: &feed.Importer{}, Correlate: &correlate.Matcher{}, CustomerLogin: &customer.Login{}, Reports: &creport.Service{}, Rules: &rules.Engine{}, Cases: &cases.Service{}, Reversal: &reversal.Service{}, Alerts: &alerts.Service{}, Incidents: &incidents.Service{}},
 		ServiceVerifier: &servauth.Verifier{},
 	})
 	routes, ok := h.(chi.Routes)
@@ -104,7 +108,7 @@ func TestNoPlannedOperationIsAlreadyServed(t *testing.T) {
 // Guards against the comparisons above passing because both sides are empty.
 func TestRouteDiscoveryFindsKnownRoutes(t *testing.T) {
 	served := routerOperations(t)
-	for _, want := range []string{"GET /v1/health", "GET /v1/ready", "POST /v1/auth/login", "GET /v1/me", "GET /v1/audit", "POST /v1/accounts/unmask", "GET /v1/config/{key}", "POST /v1/config/{key}/versions/{version}/decision", "GET /v1/calendar/next-cutoff", "GET /v1/killswitch", "POST /v1/killswitch", "POST /v1/events", "POST /v1/observations", "GET /v1/evidence", "POST /v1/evidence/{id}/link", "POST /v1/evidence/{id}/discard", "POST /v1/feeds/{mapping}/files", "GET /v1/rules", "POST /v1/rules", "GET /v1/rules/{id}", "POST /v1/rules/{id}/rollback", "POST /v1/rules/{id}/disable", "POST /v1/rules/{id}/versions/{version}/shadow", "POST /v1/rules/{id}/versions/{version}/backtest", "POST /v1/rules/{id}/versions/{version}/activation", "POST /v1/rules/{id}/versions/{version}/decision", "GET /v1/pipeline", "GET /v1/sources", "PUT /v1/sources/{system}/expectation", "GET /v1/quarantine", "POST /v1/quarantine/{id}/replay", "POST /v1/quarantine/{id}/discard", "GET /v1/transactions", "GET /v1/transactions/{id}", "GET /v1/exceptions", "GET /v1/cases/{id}", "PATCH /v1/cases/{id}", "POST /v1/complaints", "POST /v1/reversals", "POST /v1/reversals/{id}/reapproval", "GET /v1/reversals/{id}", "POST /v1/approvals/{id}/decision", "GET /v1/approvals", "GET /v1/review-items", "GET /v1/reconciliation/reversals", "GET /v1/reports/summary", "GET /v1/cases/{id}/reversal-eligibility"} {
+	for _, want := range []string{"GET /v1/health", "GET /v1/ready", "POST /v1/auth/login", "GET /v1/me", "GET /v1/audit", "POST /v1/accounts/unmask", "GET /v1/config/{key}", "POST /v1/config/{key}/versions/{version}/decision", "GET /v1/calendar/next-cutoff", "GET /v1/killswitch", "POST /v1/killswitch", "POST /v1/events", "POST /v1/observations", "GET /v1/evidence", "POST /v1/evidence/{id}/link", "POST /v1/evidence/{id}/discard", "POST /v1/feeds/{mapping}/files", "GET /v1/rules", "POST /v1/rules", "GET /v1/rules/{id}", "POST /v1/rules/{id}/rollback", "POST /v1/rules/{id}/disable", "POST /v1/rules/{id}/versions/{version}/shadow", "POST /v1/rules/{id}/versions/{version}/backtest", "POST /v1/rules/{id}/versions/{version}/activation", "POST /v1/rules/{id}/versions/{version}/decision", "GET /v1/pipeline", "GET /v1/sources", "PUT /v1/sources/{system}/expectation", "GET /v1/quarantine", "POST /v1/quarantine/{id}/replay", "POST /v1/quarantine/{id}/discard", "GET /v1/transactions", "GET /v1/transactions/{id}", "GET /v1/exceptions", "GET /v1/cases/{id}", "PATCH /v1/cases/{id}", "POST /v1/complaints", "POST /v1/reversals", "POST /v1/reversals/{id}/reapproval", "GET /v1/reversals/{id}", "POST /v1/approvals/{id}/decision", "GET /v1/approvals", "GET /v1/review-items", "GET /v1/metrics", "GET /v1/metrics/catalogue", "GET /v1/alerts", "POST /v1/alerts/{id}/acknowledge", "GET /v1/incidents", "GET /v1/incidents/{id}", "POST /v1/incidents/{id}/causation", "POST /v1/incidents/{id}/resolve", "POST /v1/customer/auth/login", "GET /v1/customer/me", "POST /v1/customer/reports", "GET /v1/customer/reports", "GET /v1/customer/reports/{id}", "POST /v1/customer/reports/{id}/confirm", "POST /v1/customer/reports/{id}/feedback", "GET /v1/labeled-examples", "POST /v1/labeled-examples/{id}/decision", "GET /v1/customer/cases", "GET /v1/customer/cases/{id}/timeline", "GET /v1/customer/cases/{id}/escalation", "GET /v1/customer/reports/{id}/draft", "GET /v1/customer/reports/{id}/deadline", "PUT /v1/customer/reports/{id}/complaint", "POST /v1/customer/reports/{id}/complaint", "GET /v1/reconciliation/reversals", "GET /v1/reports/summary", "GET /v1/cases/{id}/reversal-eligibility"} {
 		if !served[want] {
 			t.Errorf("route discovery did not find %s; found %v", want, served)
 		}

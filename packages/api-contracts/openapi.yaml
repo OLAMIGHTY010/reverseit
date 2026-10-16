@@ -23,9 +23,11 @@ tags:
   - name: Platform
   - name: Ingestion
   - name: Detection
+  - name: Customer
   - name: Transactions
   - name: Cases
   - name: Reversals
+  - name: Operations
   - name: Governance
 
 security:
@@ -1243,6 +1245,388 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /v1/customer/auth/login:
+    post:
+      tags: [Customer]
+      operationId: customerLogin
+      summary: Sign in a ReverseIt customer (development provider, synthetic customers only)
+      description: |
+        Present only when the development customer sign-in is enabled
+        (`CUSTOMER_DEV_LOGIN_ENABLED`, refused in production). The token has the
+        customer audience and works on no operator route; an operator token works on no
+        customer route. Every failure is the same 401. Repeated failures lock the
+        customer for a time. In production a bank identity provider replaces this
+        behind the same interface.
+      x-status: implemented
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [institution, customer_ref, passphrase], properties: { institution: { type: string }, customer_ref: { type: string, pattern: '^cust_[0-9a-f]{24}$' }, passphrase: { type: string } } }
+      responses:
+        '200':
+          description: Signed in.
+          content:
+            application/json:
+              schema: { type: object, required: [access_token, token_type, expires_at, customer_ref, simulated], properties: { access_token: { type: string }, token_type: { type: string }, expires_at: { type: string, format: date-time }, customer_ref: { type: string }, simulated: { type: boolean } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/customer/me:
+    get:
+      tags: [Customer]
+      operationId: customerMe
+      summary: The signed-in customer
+      description: Needs a customer-audience token. A token for a customer who is no longer active is refused.
+      x-status: implemented
+      responses:
+        '200':
+          description: The customer.
+          content:
+            application/json:
+              schema: { type: object, required: [customer_ref, display_name, linked_accounts], properties: { customer_ref: { type: string }, display_name: { type: string }, linked_accounts: { type: integer } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/customer/reports:
+    post:
+      tags: [Customer]
+      operationId: createCustomerReport
+      summary: Create a report from a pasted debit alert or an image reference
+      description: |
+        Customer token. `Idempotency-Key` is required. Consent is required and its time
+        and version are stored. The alert as pasted is never stored: only its redacted
+        form (long digit runs masked to the last four) and a hash. The text is parsed
+        by a rule-based parser; the response lists each field with a confidence and
+        sets `guided_form_required` when the customer should fill the form instead.
+        A parsed field is a suggestion. 201 new, 200 the same key was used before,
+        422 invalid or `CONSENT_REQUIRED`, 429 too many reports (with `Retry-After`).
+      x-status: implemented
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [consent, consent_version], properties: { text: { type: string, maxLength: 2000 }, image_ref: { type: string }, consent: { type: boolean }, consent_version: { type: string } } }
+      responses:
+        '200': { description: The existing report., content: { application/json: { schema: { $ref: '#/components/schemas/CustomerReport' } } } }
+        '201': { description: Created., content: { application/json: { schema: { $ref: '#/components/schemas/CustomerReport' } } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { description: Too many reports. See Retry-After. }
+    get:
+      tags: [Customer]
+      operationId: listCustomerReports
+      summary: The signed-in customer's reports
+      x-status: implemented
+      responses:
+        '200': { description: 'Reports, newest first.', content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/CustomerReport' } } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/customer/reports/{id}:
+    get:
+      tags: [Customer]
+      operationId: getCustomerReport
+      summary: One of the customer's reports
+      description: Another customer's report, or one that does not exist, is a 404.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: The report., content: { application/json: { schema: { $ref: '#/components/schemas/CustomerReport' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/customer/reports/{id}/confirm:
+    post:
+      tags: [Customer]
+      operationId: confirmCustomerReport
+      summary: Confirm or edit the fields and match the report to the customer's own transactions
+      description: |
+        The server validates every field again. Matching looks only at transactions on
+        accounts the bank recorded as the customer's. An exact reference or session
+        links; anything weaker comes back as ranked `candidates` with reasons and the
+        customer repeats the call with `candidate_transaction_id`. Fuzzy matching is off
+        until a time window is approved (`customer_match.window_seconds`). The
+        outcome's `match_status` is one of `candidates`, `matched_existing_case` (counted
+        as a repeat contact), `matched_transaction`, `verified_successful` and
+        `already_reversed` (both with verified evidence), `duplicate_report`,
+        `other_bank` and `unmatched`. 409 if the report was already submitted.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount_minor, occurred_at]
+              properties:
+                amount_minor: { description: 'Minor units, a decimal string or an integer.', oneOf: [{ type: string }, { type: integer }] }
+                occurred_at: { type: string, format: date-time }
+                account_tail: { type: string, pattern: '^[0-9]{4}$' }
+                reference: { type: string }
+                channel: { type: string }
+                narration: { type: string, maxLength: 120 }
+                candidate_transaction_id: { type: string, format: uuid }
+      responses:
+        '200': { description: The report with its outcome., content: { application/json: { schema: { $ref: '#/components/schemas/CustomerReport' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /v1/customer/reports/{id}/draft:
+    get:
+      tags: [Customer]
+      operationId: customerReportDraft
+      summary: The proposed kind of problem, the deadline it implies and the complaint text
+      description: |
+        Writes nothing. The kind of problem (`dispute_type`) is proposed from what the
+        bank knows; pass `dispute_type` to state another. The clock is chosen by a fixed
+        mapping and never by a model. An ATM report has no proposal and must say whose
+        machine it was (409 NOT_READY otherwise). `review_required` is set when a
+        person should check the choice. Complaint text is built from facts only.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: dispute_type, in: query, schema: { type: string, enum: [FAILED_TRANSFER, DUPLICATE_DEBIT, POS_WEB_FAILURE, ATM_ON_US, ATM_NOT_ON_US, WRONG_ACCOUNT_OR_AMOUNT, UNMATCHED_CLAIM] } }
+      responses:
+        '200': { description: The draft., content: { application/json: { schema: { type: object } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /v1/customer/reports/{id}/deadline:
+    get:
+      tags: [Customer]
+      operationId: customerReportDeadline
+      summary: The clock and countdown for a report
+      description: |
+        The regulatory deadline and the bank's own target are returned apart, each with
+        its source. The regulatory one carries the clock's registry status (confirmed,
+        reported, draft, conflicting); anything but confirmed is unverified. `state` is
+        on_track, approaching, urgent or overdue; approaching and urgent exist only when
+        percentages are approved. A clock nobody approved yields no deadline and
+        `not_configured` says which key is missing.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: dispute_type, in: query, schema: { type: string } }
+      responses:
+        '200': { description: The deadline., content: { application/json: { schema: { type: object } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /v1/customer/reports/{id}/complaint:
+    put:
+      tags: [Customer]
+      operationId: editCustomerComplaint
+      summary: Save the customer's own wording before submitting
+      description: The original draft is always kept beside the edit. 409 once submitted.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [text], properties: { text: { type: string, maxLength: 4000 } } }
+      responses:
+        '204': { description: Saved. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    post:
+      tags: [Customer]
+      operationId: submitCustomerComplaint
+      summary: Send the report to the bank
+      description: |
+        Opens CUS001 (or CUS002 for a wrong account or amount) on the shared queue with
+        the regulatory deadline and the internal target kept apart, or adds the report
+        to the case that already exists. The complaint and the redacted alert are
+        attached. The customer receives one acknowledgement that says nothing about
+        money, and operations are alerted. Repeating it returns the same case (200).
+        A transaction the bank shows as complete needs `disputes_verified_outcome`. An
+        alert from another bank, a duplicate report and an unresolved choice between
+        candidates cannot be submitted.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { dispute_type: { type: string }, text: { type: string, maxLength: 4000 }, disputes_verified_outcome: { type: boolean } } }
+      responses:
+        '200': { description: Already submitted., content: { application/json: { schema: { type: object } } } }
+        '201': { description: Submitted., content: { application/json: { schema: { type: object } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /v1/customer/cases:
+    get:
+      tags: [Customer]
+      operationId: customerCases
+      summary: The customer's own cases, including ones the bank found that they never reported
+      description: |
+        A case is visible if the customer reported it, or if the bank detected it on a
+        transaction of an account the bank recorded as the customer's. `origin` is
+        `reported_by_you` or `found_by_the_bank`. `bank_target` is the earlier of the
+        regulatory deadline and the bank's own target. Nothing about anyone else.
+      x-status: implemented
+      responses:
+        '200': { description: The cases., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { type: object } } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/customer/cases/{id}/timeline:
+    get:
+      tags: [Customer]
+      operationId: customerCaseTimeline
+      summary: What the customer may be told about a case
+      description: |
+        Stage, a plain headline and a timeline. "Resolved" and "Reversal confirmed" appear
+        only after the financial outcome is verified; nothing says money was returned
+        before then. A case that is not the customer's is a 404.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: The status., content: { application/json: { schema: { type: object } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/customer/cases/{id}/escalation:
+    get:
+      tags: [Customer]
+      operationId: customerCaseEscalation
+      summary: The escalation ladder, once the case is overdue and unresolved
+      description: |
+        Empty and `due: false` until the earlier of the regulatory deadline and the bank's
+        target has passed on an unfinished case. Then the steps the bank supplied and
+        Compliance approved, in order. If none is approved the answer says so and invents
+        no contact details.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: The ladder., content: { application/json: { schema: { type: object, required: [due, steps], properties: { due: { type: boolean }, note: { type: string }, steps: { type: array, items: { type: object, properties: { step: { type: integer }, label: { type: string }, contact: { type: string }, wording: { type: string } } } } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/customer/reports/{id}/feedback:
+    post:
+      tags: [Customer]
+      operationId: customerFeedback
+      summary: Say whether the report helped, or that the value was not received
+      description: |
+        Needs Idempotency-Key and a submitted report (409 NOT_READY otherwise). Saying the
+        value was not received (`disputes_outcome`) adds a note while the case is open and
+        reopens it once it is closed. Reopening changes no financial fact and creates no
+        reversal; any further remediation goes through the same eight-check gate.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, properties: { helpful: { type: boolean }, comment: { type: string, maxLength: 1000 }, disputes_outcome: { type: boolean } } }
+      responses:
+        '200': { description: Seen before., content: { application/json: { schema: { type: object } } } }
+        '201': { description: Recorded., content: { application/json: { schema: { type: object, required: [id, reopened, case_ref, message], properties: { id: { type: string, format: uuid }, reopened: { type: boolean }, case_ref: { type: string }, message: { type: string } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /v1/labeled-examples:
+    get:
+      tags: [Detection]
+      operationId: listLabeledExamples
+      summary: Labelled examples from cases the detector missed
+      description: |
+        Needs the `view_exception_queue` grant with `full` scope. `status` is pending
+        (default), confirmed, rejected or superseded. Only confirmed examples may feed
+        training or rule tuning.
+      x-status: implemented
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [pending, confirmed, rejected, superseded] } }
+      responses:
+        '200': { description: Examples., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { type: object } } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/labeled-examples/{id}/decision:
+    post:
+      tags: [Detection]
+      operationId: decideLabeledExample
+      summary: Confirm or reject a pending example
+      description: |
+        Needs the `approve` scope of `change_rules` and MFA. Whoever closed the case may
+        not confirm its label (403 SELF_APPROVAL). A rejection needs a note. The decision
+        is a new version; the pending one is kept as superseded. Audited.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [confirm], properties: { confirm: { type: boolean }, note: { type: string } } }
+      responses:
+        '200': { description: The new version., content: { application/json: { schema: { type: object } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /v1/metrics/catalogue:
+    get:
+      tags: [Platform]
+      operationId: metricsCatalogue
+      summary: What each reporting metric means
+      description: |
+        For every metric: its definition, formula, source tables, period, unit and known
+        limitations. Needs `view_exception_queue` with `full`, `metadata` or `aggregate`
+        scope.
+      x-status: implemented
+      responses:
+        '200': { description: The catalogue., content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/MetricDefinition' } } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/metrics:
+    get:
+      tags: [Platform]
+      operationId: metricsReport
+      summary: Reporting metrics for a period, measured from stored records
+      description: |
+        `from` and `to` are RFC 3339 times; the default is the last seven days and the
+        longest period is 366 days. Values are measured, `null` when there are no samples
+        (never zero), and describe synthetic data only. Money is per currency and kept as
+        four separate numbers: gross flagged, submitted, reversed and still open.
+        Latencies are p50 and p95 by linear interpolation in seconds. No metric is a
+        target or a claim about real traffic. "Complaints prevented" is not offered.
+      x-status: implemented
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+      responses:
+        '200': { description: The metrics., content: { application/json: { schema: { $ref: '#/components/schemas/MetricsReport' } } } }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /v1/review-items:
     get:
       tags: [Reversals]
@@ -1266,6 +1650,120 @@ paths:
               schema: { type: object, required: [items, simulated], properties: { simulated: { type: boolean }, items: { type: array, items: { $ref: '#/components/schemas/ReviewItem' } } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/alerts:
+    get:
+      tags: [Operations]
+      operationId: listAlerts
+      summary: Internal alerts, newest first
+      description: |
+        Needs `view_exception_queue` with `full` scope. Alerts are internal only; none is sent
+        to a customer. One open alert exists per kind and subject (deduplicated), routed to the
+        people on call and escalated when unacknowledged past the approved
+        `alert.escalate_after_minutes`.
+      x-status: implemented
+      parameters:
+        - { name: status, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: Alerts.
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { type: object } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/alerts/{id}/acknowledge:
+    post:
+      tags: [Operations]
+      operationId: acknowledgeAlert
+      summary: Acknowledge an alert
+      description: Only someone routed the alert, holding its target role or the role it escalated to.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: The acknowledged alert. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: Already acknowledged or no longer open. }
+
+  /v1/incidents:
+    get:
+      tags: [Operations]
+      operationId: listIncidents
+      summary: Incidents grouping exceptions by rail, channel and error signature
+      description: Needs `view_exception_queue` with `full` or `metadata` scope. Grouping needs approved `incident.group_window_minutes` and `incident.min_group_size`.
+      x-status: implemented
+      parameters:
+        - { name: status, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: Incidents.
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { type: object } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /v1/incidents/{id}:
+    get:
+      tags: [Operations]
+      operationId: getIncident
+      summary: One incident with the cases in it
+      description: The id may be the incident reference. Needs `full` scope.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The incident and its case ids. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/incidents/{id}/causation:
+    post:
+      tags: [Operations]
+      operationId: setIncidentCausation
+      summary: Record how sure the cause is
+      description: Needs `add_notes_evidence` with `full` scope. The judgement only moves up (correlated, probable, confirmed), with a note; going back is 409.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [causation_status, note], properties: { causation_status: { type: string }, suspected_cause: { type: string }, note: { type: string } } }
+      responses:
+        '200': { description: The incident. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: The judgement would move down. }
+        '422': { description: Missing or invalid field. }
+
+  /v1/incidents/{id}/resolve:
+    post:
+      tags: [Operations]
+      operationId: resolveIncident
+      summary: Resolve an incident with a post-incident review note
+      description: Needs `add_notes_evidence` with `full` scope. A review note of substance is required.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [review_note], properties: { review_note: { type: string } } }
+      responses:
+        '200': { description: The resolved incident. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { description: Review note too short. }
 
   /v1/approvals:
     get:
@@ -2235,6 +2733,65 @@ components:
         txn_id: { type: string, format: uuid }
         lifecycle_state: { type: string }
         duplicate: { type: boolean }
+    CustomerReport:
+      type: object
+      required: [id, status, parser_status, parsed, guided_form_required, created_at, version]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [created, confirmed, submitted] }
+        parser_status: { type: string, enum: [parsed, unavailable, unreadable, image_needs_parser] }
+        parsed:
+          type: object
+          properties:
+            fields: { type: object, additionalProperties: { type: object, properties: { value: { type: string }, confidence: { type: number } } } }
+            confidence: { type: number }
+            other_bank: { type: boolean }
+            flags: { type: array, items: { type: string } }
+            parser: { type: string }
+        guided_form_required: { type: boolean }
+        confirmed: { type: object, additionalProperties: { type: string } }
+        match_status: { type: string }
+        candidates: { type: array, items: { type: object } }
+        transaction_id: { type: string, format: uuid }
+        case_id: { type: string, format: uuid }
+        dispute_type: { type: string }
+        created_at: { type: string, format: date-time }
+        version: { type: integer }
+        outcome: { type: object, description: 'Present on the response to a confirm call.' }
+    MetricDefinition:
+      type: object
+      required: [name, title, definition, formula, source_tables, period, unit, limitations]
+      properties:
+        name: { type: string }
+        title: { type: string }
+        definition: { type: string }
+        formula: { type: string }
+        source_tables: { type: array, items: { type: string } }
+        period: { type: string }
+        unit: { type: string }
+        limitations: { type: string }
+    MetricsReport:
+      type: object
+      required: [from, to, simulated, metrics]
+      properties:
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        simulated: { type: boolean }
+        metrics:
+          type: array
+          items:
+            type: object
+            required: [name, samples, unit]
+            properties:
+              name: { type: string }
+              samples: { type: integer }
+              unit: { type: string }
+              p50: { type: number }
+              p95: { type: number }
+              value: { type: number }
+              breakdown: { type: object, additionalProperties: { type: number } }
+              by_currency: { type: object, additionalProperties: { type: object, additionalProperties: { type: integer } } }
+              note: { type: string }
     ReviewItem:
       type: object
       required: [kind, case_id, case_ref, classification, case_status, opened_at, evidence, gate, blocked_because, release_allowed, release_requires, simulated]
@@ -2476,6 +3033,7 @@ components:
         regulatory_clock: { type: string }
         opened_at: { type: string, format: date-time }
         sla_due_at: { type: string, format: date-time }
+        internal_target_at: { type: string, format: date-time, description: "The bank's own target, kept apart from the regulatory deadline in sla_due_at. Absent when none was set." }
         resolved_at: { type: string, format: date-time }
         closed_reason: { type: string }
         version: { type: integer }

@@ -79,6 +79,31 @@ func NewRouter(o Options) http.Handler {
 			v1.With(requireService(o.ServiceVerifier, "events:write")).Post("/observations", o.Services.submitObservation)
 		}
 
+		// ReverseIt customer routes: a different token audience from operators.
+		if o.Services.ready() && o.Services.CustomerLogin != nil {
+			v1.Post("/customer/auth/login", o.Services.customerLogin)
+			v1.Route("/customer", func(cr chi.Router) {
+				cr.Use(requireAuth(o.Verifier, identity.AudienceCustomer))
+				cr.Get("/me", o.Services.customerMe)
+				if o.Services.Reports != nil && o.Services.Cases != nil {
+					cr.Get("/cases", o.Services.customerCases)
+					cr.Get("/cases/{id}/timeline", o.Services.customerCaseTimeline)
+					cr.Get("/cases/{id}/escalation", o.Services.customerCaseEscalation)
+				}
+				if o.Services.Reports != nil {
+					cr.Post("/reports", o.Services.createCustomerReport)
+					cr.Get("/reports", o.Services.listCustomerReports)
+					cr.Get("/reports/{id}", o.Services.getCustomerReport)
+					cr.Post("/reports/{id}/confirm", o.Services.confirmCustomerReport)
+					cr.Get("/reports/{id}/draft", o.Services.customerReportDraft)
+					cr.Get("/reports/{id}/deadline", o.Services.customerReportDeadline)
+					cr.Put("/reports/{id}/complaint", o.Services.editCustomerComplaint)
+					cr.Post("/reports/{id}/complaint", o.Services.submitCustomerComplaint)
+					cr.Post("/reports/{id}/feedback", o.Services.customerFeedback)
+				}
+			})
+		}
+
 		// Everything below needs a valid operator token. Routes are added only
 		// inside this group, so a new route cannot be public by accident.
 		v1.Group(func(pr chi.Router) {
@@ -104,6 +129,12 @@ func NewRouter(o Options) http.Handler {
 					pr.Get("/quarantine", o.Services.listQuarantine)
 					pr.Post("/quarantine/{id}/replay", o.Services.replayQuarantine)
 					pr.Post("/quarantine/{id}/discard", o.Services.discardQuarantine)
+				}
+				if o.Services.Cases != nil {
+					pr.Get("/metrics/catalogue", o.Services.metricsCatalogue)
+					pr.Get("/metrics", o.Services.metricsReport)
+					pr.Get("/labeled-examples", o.Services.listLabeledExamples)
+					pr.Post("/labeled-examples/{id}/decision", o.Services.decideLabeledExample)
 				}
 				if o.Services.Rules != nil {
 					pr.Get("/rules", o.Services.listRules)
@@ -151,6 +182,16 @@ func NewRouter(o Options) http.Handler {
 					pr.Post("/settlement-files", o.Services.uploadSettlementFile)
 					pr.Get("/reconciliation/breaks", o.Services.listReconBreaks)
 					pr.Post("/reconciliation/breaks/{id}/pair", o.Services.pairReconBreak)
+				}
+				if o.Services.Alerts != nil {
+					pr.Get("/alerts", o.Services.listAlerts)
+					pr.Post("/alerts/{id}/acknowledge", o.Services.acknowledgeAlert)
+				}
+				if o.Services.Incidents != nil {
+					pr.Get("/incidents", o.Services.listIncidents)
+					pr.Get("/incidents/{id}", o.Services.getIncident)
+					pr.Post("/incidents/{id}/causation", o.Services.setIncidentCausation)
+					pr.Post("/incidents/{id}/resolve", o.Services.resolveIncident)
 				}
 				if o.Services.KillSwitch != nil {
 					pr.Get("/killswitch", o.Services.getKillSwitch)

@@ -72,8 +72,10 @@ func TestMatrixInDatabaseMatchesTheV2TableCellForCell(t *testing.T) {
 			}
 		}
 	}
+	// manage_ingestion is an addition to the v2 table (migration 0023): ADMIN_INTEGRATION full, HEAD_OPS metadata.
+	want += 2
 	if extra != want {
-		t.Errorf("database holds %d grants, the v2 table has %d", extra, want)
+		t.Errorf("database holds %d grants, the v2 table plus manage_ingestion has %d", extra, want)
 	}
 }
 
@@ -89,7 +91,7 @@ func TestPrivilegedCapabilitiesRequireMFAInTheDatabase(t *testing.T) {
 		}
 	}
 	sort.Strings(mfa)
-	want := []string{"approve_reversal", "change_rules", "manage_users", "override_gate", "view_unmasked_account"}
+	want := []string{"approve_reversal", "change_rules", "manage_ingestion", "manage_users", "override_gate", "view_unmasked_account"}
 	if len(mfa) != len(want) {
 		t.Fatalf("MFA required for %v, want %v", mfa, want)
 	}

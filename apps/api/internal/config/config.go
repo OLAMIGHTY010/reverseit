@@ -77,6 +77,13 @@ type Config struct {
 	// FinancialExecutionEnabled gates every call to a reversal provider. It
 	// defaults to false and must be set explicitly.
 	FinancialExecutionEnabled bool
+	// CustomerDevLoginEnabled turns on the development sign-in for synthetic ReverseIt
+	// customers. It is refused in production, where a real identity provider is
+	// required.
+	CustomerDevLoginEnabled bool
+	// OwnBankNames are names that identify this bank in an alert, comma separated in
+	// OWN_BANK_NAMES. They let the alert parser tell another bank's alert from ours.
+	OwnBankNames []string
 }
 
 // Load reads configuration from the process environment.
@@ -124,6 +131,8 @@ func LoadFrom(lookup func(string) (string, bool)) (*Config, error) {
 		OutboxBatchSize:    l.positiveInt("OUTBOX_BATCH_SIZE", 100),
 
 		FinancialExecutionEnabled: l.boolean("FINANCIAL_EXECUTION_ENABLED", false),
+		CustomerDevLoginEnabled:   l.boolean("CUSTOMER_DEV_LOGIN_ENABLED", false),
+		OwnBankNames:              splitList(l.str("OWN_BANK_NAMES", "")),
 	}
 
 	c.validate(l)
@@ -159,6 +168,9 @@ func (c *Config) validate(l *loader) {
 		}
 	}
 
+	if c.CustomerDevLoginEnabled && c.Environment == EnvProduction {
+		l.errs = append(l.errs, errors.New("CUSTOMER_DEV_LOGIN_ENABLED cannot be true in production: customers must sign in through the bank's identity provider"))
+	}
 	if c.FinancialExecutionEnabled && c.Environment == EnvProduction {
 		l.errs = append(l.errs, errors.New("FINANCIAL_EXECUTION_ENABLED cannot be true in production until the required approvals are recorded and this check is changed"))
 	}
@@ -192,6 +204,7 @@ func (c *Config) LogValue() slog.Value {
 		slog.String("db_name", c.DBName),
 		slog.String("redis_addr", c.RedisAddr()),
 		slog.Bool("financial_execution_enabled", c.FinancialExecutionEnabled),
+		slog.Bool("customer_dev_login_enabled", c.CustomerDevLoginEnabled),
 	)
 }
 
@@ -284,4 +297,15 @@ func (l *loader) boolean(key string, def bool) bool {
 		return def
 	}
 	return b
+}
+
+// splitList splits a comma separated value, dropping blanks.
+func splitList(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }

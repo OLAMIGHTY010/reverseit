@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/smartreversal/smartreversal/apps/api/internal/alerts"
 	"github.com/smartreversal/smartreversal/apps/api/internal/audit"
 	"github.com/smartreversal/smartreversal/apps/api/internal/authz"
 	"github.com/smartreversal/smartreversal/apps/api/internal/cases"
@@ -18,11 +19,13 @@ import (
 	"github.com/smartreversal/smartreversal/apps/api/internal/correlate"
 	"github.com/smartreversal/smartreversal/apps/api/internal/detect"
 	"github.com/smartreversal/smartreversal/apps/api/internal/inbound"
+	"github.com/smartreversal/smartreversal/apps/api/internal/incidents"
 	"github.com/smartreversal/smartreversal/apps/api/internal/killswitch"
 	"github.com/smartreversal/smartreversal/apps/api/internal/observability"
 	"github.com/smartreversal/smartreversal/apps/api/internal/platform/db"
 	"github.com/smartreversal/smartreversal/apps/api/internal/platform/redisx"
 	"github.com/smartreversal/smartreversal/apps/api/internal/reversal"
+	"github.com/smartreversal/smartreversal/apps/api/internal/routing"
 	"github.com/smartreversal/smartreversal/apps/api/internal/rules"
 	"github.com/smartreversal/smartreversal/apps/api/internal/server"
 	"github.com/smartreversal/smartreversal/apps/api/internal/txn"
@@ -87,7 +90,13 @@ func run() error {
 		Policy: policy, SoD: authz.SoD{Conflicts: &authz.PGConflictChecker{Pool: pool}},
 		Status: reversal.SimStatus{}, Ledger: reversal.SimLedger{}, Provider: reversal.SimProvider{}}
 
+	routingSvc := &routing.Service{Audit: app}
+	alertSvc := &alerts.Service{Routing: routingSvc, Config: cfgSvc, Audit: app}
+	incidentSvc := &incidents.Service{Config: cfgSvc, Alerts: alertSvc, Audit: app}
+
 	return worker.Run(ctx, worker.Deps{
+		Incidents:       incidentSvc,
+		Alerts:          alertSvc,
 		Detector:        detector,
 		Inbound:         &inbound.Handler{Txn: txnSvc, Correlate: &correlate.Matcher{Txn: txnSvc}},
 		Reversal:        revSvc,

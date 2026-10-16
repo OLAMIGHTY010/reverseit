@@ -11,9 +11,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
+	"github.com/smartreversal/smartreversal/apps/api/internal/alerts"
 	"github.com/smartreversal/smartreversal/apps/api/internal/detect"
 	"github.com/smartreversal/smartreversal/apps/api/internal/inbound"
+	"github.com/smartreversal/smartreversal/apps/api/internal/incidents"
 	"github.com/smartreversal/smartreversal/apps/api/internal/outbox"
 	"github.com/smartreversal/smartreversal/apps/api/internal/platform/db"
 	"github.com/smartreversal/smartreversal/apps/api/internal/platform/redisx"
@@ -43,6 +46,10 @@ type Deps struct {
 	// Reversal, when set, makes each sweep also run the simulated reversal
 	// automation and advance reversals still in flight.
 	Reversal *reversal.Service
+	// Incidents and Alerts, when both are set, make each sweep also group exceptions into
+	// incidents, check for spikes, raise and clear alerts, and escalate unanswered ones.
+	Incidents *incidents.Service
+	Alerts    *alerts.Service
 	// Inbound, when set, consumes the inbound events stream that sources write to.
 	Inbound *inbound.Handler
 }
@@ -128,6 +135,9 @@ func sweepLoop(ctx context.Context, d Deps) error {
 			if d.Reversal != nil {
 				reverseAll(ctx, d)
 			}
+			if d.Incidents != nil && d.Alerts != nil {
+				opsAll(ctx, d)
+			}
 		}
 	}
 }
@@ -159,6 +169,58 @@ func reverseAll(ctx context.Context, d Deps) {
 		}
 		if len(res) > 0 {
 			d.Logger.Info("reversal_sweep", "tenant", t.String(), "handled", len(res))
+		}
+	}
+}
+
+// opsAll runs the operations sweep for every institution: group exceptions into
+// incidents, look for spikes, raise and clear alerts, and escalate the unanswered ones.
+// These only read the platform and record alerts and incidents; none moves money, so the
+// kill switch does not pause them. A failure for one institution is logged and does not
+// stop the others.
+func opsAll(ctx context.Context, d Deps) {
+	rows, err := d.Pool.Query(ctx, `SELECT id FROM institutions ORDER BY code`)
+	if err != nil {
+		d.Logger.Error("ops_sweep_failed", "error", err)
+		return
+	}
+	var tenants []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			d.Logger.Error("ops_sweep_failed", "error", err)
+			return
+		}
+		tenants = append(tenants, id)
+	}
+	rows.Close()
+	for _, t := range tenants {
+		err := d.Pool.WithTenant(ctx, t, func(tx pgx.Tx) error {
+			g, err := d.Incidents.Group(ctx, tx, t)
+			if err != nil {
+				return err
+			}
+			sp, err := d.Incidents.DetectSpikes(ctx, tx, t)
+			if err != nil {
+				return err
+			}
+			a, err := d.Alerts.Sweep(ctx, tx, t, incidents.Covering())
+			if err != nil {
+				return err
+			}
+			esc, err := d.Alerts.Escalate(ctx, tx, t)
+			if err != nil {
+				return err
+			}
+			if g.Opened+g.Linked+len(sp.Spikes)+a.Created+a.Resolved+esc > 0 {
+				d.Logger.Info("ops_sweep", "tenant", t.String(), "incidents_opened", g.Opened, "cases_linked", g.Linked, "spikes", len(sp.Spikes),
+					"alerts_created", a.Created, "alerts_resolved", a.Resolved, "escalated", esc)
+			}
+			return nil
+		})
+		if err != nil && ctx.Err() == nil {
+			d.Logger.Error("ops_sweep_failed", "tenant", t.String(), "error", err)
 		}
 	}
 }
