@@ -77,7 +77,7 @@ export const RegulatoryGeneratorTab: React.FC<RegulatoryGeneratorTabProps> = ({ 
               CBN Monthly Disputed Transactions Compliance Return
             </h3>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-mono-financial">
-              CBN CPD Form 04
+              CBN Compliance • Form 04
             </span>
           </div>
           <div className="mt-1 flex items-center gap-3 text-[12px] text-[var(--text-muted)] font-mono-financial">

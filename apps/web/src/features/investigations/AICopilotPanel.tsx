@@ -182,7 +182,7 @@ In accordance with CBN Instant Payment Standards, we will notify you immediately
                 AI Copilot & Citation Assistant
               </span>
               <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-800">
-                Live Assistant
+                Operations Copilot
               </span>
             </div>
             <div className="text-[10px] text-[var(--text-muted)] flex items-center gap-1 font-mono-financial">

@@ -192,3 +192,18 @@ func TestLoggingConfigDoesNotLeakSecrets(t *testing.T) {
 		t.Fatalf("expected safe fields in log: %s", out)
 	}
 }
+
+func TestTheCustomerDevelopmentLoginIsOffByDefaultAndRefusedInProduction(t *testing.T) {
+	c, err := LoadFrom(env(base()))
+	if err != nil || c.CustomerDevLoginEnabled {
+		t.Fatalf("%v %v", err, c)
+	}
+	m := with(base(), "CUSTOMER_DEV_LOGIN_ENABLED", "true")
+	if c, err := LoadFrom(env(m)); err != nil || !c.CustomerDevLoginEnabled {
+		t.Fatalf("it should be allowed in development: %v", err)
+	}
+	m = with(base(), "CUSTOMER_DEV_LOGIN_ENABLED", "true", "ENVIRONMENT", EnvProduction, "DB_SSLMODE", "require")
+	if _, err := LoadFrom(env(m)); err == nil || !strings.Contains(err.Error(), "CUSTOMER_DEV_LOGIN_ENABLED") {
+		t.Fatalf("production accepted the development login: %v", err)
+	}
+}

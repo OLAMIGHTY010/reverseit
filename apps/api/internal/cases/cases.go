@@ -19,6 +19,7 @@ import (
 	"github.com/smartreversal/smartreversal/apps/api/internal/bizcal"
 	"github.com/smartreversal/smartreversal/apps/api/internal/configsvc"
 	"github.com/smartreversal/smartreversal/apps/api/internal/events"
+	"github.com/smartreversal/smartreversal/apps/api/internal/routing"
 )
 
 // Classification codes. The first six come from the scope document. Others
@@ -30,6 +31,7 @@ const (
 	CodeReversalErr = "REV001"
 	CodeSettlement  = "STL001"
 	CodeCustomer    = "CUS001"
+	CodeWrongAcct   = "CUS002" // customer-reported wrong account or amount; separate written-reversal path
 	CodeAtmFault    = "ATM001"
 	CodeDisputedFee = "FEE001"
 	CodeVendorDrop  = "VND001"
@@ -44,6 +46,7 @@ var knownCodes = map[string]bool{
 	CodeReversalErr: true,
 	CodeSettlement:  true,
 	CodeCustomer:    true,
+	CodeWrongAcct:   true,
 	CodeAtmFault:    true,
 	CodeDisputedFee: true,
 	CodeVendorDrop:  true,
@@ -152,10 +155,13 @@ type Case struct {
 	RegulatoryClock string
 	OpenedAt        time.Time
 	SLADueAt        *time.Time
-	ResolvedAt      *time.Time
-	ClosedReason    string
-	Complaint       json.RawMessage
-	Version         int
+	// InternalTargetAt is the bank's own target, kept apart from the regulatory
+	// deadline in SLADueAt. Nil when none was set.
+	InternalTargetAt *time.Time
+	ResolvedAt       *time.Time
+	ClosedReason     string
+	Complaint        json.RawMessage
+	Version          int
 }
 
 // Evidence is something that supports a case.
@@ -192,21 +198,31 @@ type OpenInput struct {
 	ExposureMinor  *int64
 	Currency       string
 	Rail           string // used to pick the regulatory clock
-	RootCause      string
-	RuleID         string
-	RuleVersion    string
-	Explanation    string
-	Evidence       []Evidence
-	Complaint      json.RawMessage
-	Actor          Actor
-	At             time.Time // when the trigger happened; defaults to now
+	// Clock names the regulatory clock explicitly (the deadline engine's choice for a
+	// customer dispute). When empty the clock is picked from the code and the rail.
+	Clock string
+	// InternalTargetAt is the bank's own target, when one is known.
+	InternalTargetAt *time.Time
+	RootCause        string
+	RuleID           string
+	RuleVersion      string
+	Explanation      string
+	Evidence         []Evidence
+	Complaint        json.RawMessage
+	Actor            Actor
+	At               time.Time // when the trigger happened; defaults to now
 }
 
 // Service creates and changes cases.
 type Service struct {
-	Audit  *audit.Appender
-	Config *configsvc.Service
-	Now    func() time.Time
+	Audit   *audit.Appender
+	Config  *configsvc.Service
+	Routing *routing.Service
+	Now     func() time.Time
+	// OnClose, when set, is called inside the transition's transaction after a case
+	// reaches a terminal status. It must not change the case. An error stops the
+	// transition.
+	OnClose func(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, c Case, by uuid.UUID) error
 }
 
 func (s *Service) now() time.Time {
@@ -221,7 +237,7 @@ func (s *Service) now() time.Time {
 // approved configuration only.
 func clockFor(code, rail string) string {
 	switch {
-	case code == CodeDuplicate:
+	case code == CodeDuplicate || code == CodeWrongAcct:
 		return "WRONG_ACCOUNT_REQUEST"
 	case (code == CodeNoCredit || code == CodeUnknown || code == CodeCustomer || code == CodeIncomplete) && (rail == "NIP" || rail == "INTERCHANGE"):
 		return "FAILED_INSTANT_TRANSFER"
@@ -315,14 +331,14 @@ func (s *Service) audit(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, a Acto
 }
 
 const caseColumns = `id, case_ref, classification, status, priority, risk_grade, source, txn_id, exposure_minor, coalesce(currency, ''),
-	root_cause, owner_id, queue, rule_id, rule_version, regulatory_clock, opened_at, sla_due_at, resolved_at, closed_reason, complaint, version`
+	root_cause, owner_id, queue, rule_id, rule_version, regulatory_clock, opened_at, sla_due_at, resolved_at, closed_reason, complaint, version, internal_target_at`
 
 func scanCase(row pgx.Row) (Case, error) {
 	var c Case
 	var complaint []byte
 	if err := row.Scan(&c.ID, &c.Ref, &c.Classification, &c.Status, &c.Priority, &c.RiskGrade, &c.Source, &c.TxnID, &c.ExposureMinor,
 		&c.Currency, &c.RootCause, &c.OwnerID, &c.Queue, &c.RuleID, &c.RuleVersion, &c.RegulatoryClock, &c.OpenedAt, &c.SLADueAt,
-		&c.ResolvedAt, &c.ClosedReason, &complaint, &c.Version); err != nil {
+		&c.ResolvedAt, &c.ClosedReason, &complaint, &c.Version, &c.InternalTargetAt); err != nil {
 		return Case{}, err
 	}
 	if complaint != nil {
@@ -366,7 +382,11 @@ func (s *Service) Open(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, in Open
 		}
 	}
 
-	clock, due, err := s.deadline(ctx, tx, tenant, clockFor(in.Classification, in.Rail), opened)
+	wanted := in.Clock
+	if wanted == "" {
+		wanted = clockFor(in.Classification, in.Rail)
+	}
+	clock, due, err := s.deadline(ctx, tx, tenant, wanted, opened)
 	if err != nil {
 		return Case{}, false, err
 	}
@@ -384,10 +404,10 @@ func (s *Service) Open(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, in Open
 	id := uuid.New()
 	_, err = tx.Exec(ctx, `
 		INSERT INTO cases (tenant_id, id, case_ref, classification, status, priority, risk_grade, source, txn_id, exposure_minor, currency,
-			root_cause, rule_id, rule_version, regulatory_clock, opened_at, sla_due_at, complaint)
-		VALUES ($1,$2,$3,$4,'DETECTED',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+			root_cause, rule_id, rule_version, regulatory_clock, opened_at, sla_due_at, complaint, internal_target_at)
+		VALUES ($1,$2,$3,$4,'DETECTED',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
 		tenant, id, ref, in.Classification, priorityFor(in.Classification, in.RiskGrade), in.RiskGrade, in.Source, in.TxnID, in.ExposureMinor,
-		currency, in.RootCause, in.RuleID, in.RuleVersion, clock, opened, due, nullJSON(in.Complaint))
+		currency, in.RootCause, in.RuleID, in.RuleVersion, clock, opened, due, nullJSON(in.Complaint), in.InternalTargetAt)
 	if err != nil {
 		return Case{}, false, fmt.Errorf("cases: insert: %w", err)
 	}
@@ -518,6 +538,19 @@ func (s *Service) Transition(ctx context.Context, tx pgx.Tx, tenant, caseID uuid
 		resolved = now
 		closedReason = strings.TrimSpace(reason)
 	}
+
+	if c.Status == StExternalDependency && c.SLADueAt != nil && to != StExternalDependency {
+		var pausedAt time.Time
+		err := tx.QueryRow(ctx, `SELECT at FROM case_events WHERE tenant_id = $1 AND case_id = $2 AND to_status = 'EXTERNAL_DEPENDENCY' ORDER BY seq DESC LIMIT 1`, tenant, caseID).Scan(&pausedAt)
+		if err == nil && !pausedAt.IsZero() {
+			pauseDuration := now.Sub(pausedAt)
+			if pauseDuration > 0 {
+				newDue := c.SLADueAt.Add(pauseDuration)
+				c.SLADueAt = &newDue
+				_, _ = tx.Exec(ctx, `UPDATE cases SET sla_due_at = $3 WHERE tenant_id = $1 AND id = $2`, tenant, caseID, newDue)
+			}
+		}
+	}
 	if _, err := tx.Exec(ctx, `UPDATE cases SET status = $3, version = version + 1, updated_at = $4,
 			resolved_at = coalesce($5, resolved_at), closed_reason = $6 WHERE tenant_id = $1 AND id = $2`,
 		tenant, caseID, to, now, resolved, closedReason); err != nil {
@@ -535,19 +568,211 @@ func (s *Service) Transition(ctx context.Context, tx pgx.Tx, tenant, caseID uuid
 		Fields: map[string]any{"case_id": caseID.String(), "case_ref": c.Ref, "classification": c.Classification, "from_status": from, "to_status": to, "version": c.Version}}); err != nil {
 		return Case{}, err
 	}
-	return scanCase(tx.QueryRow(ctx, `SELECT `+caseColumns+` FROM cases WHERE tenant_id = $1 AND id = $2`, tenant, caseID))
+	out, err := scanCase(tx.QueryRow(ctx, `SELECT `+caseColumns+` FROM cases WHERE tenant_id = $1 AND id = $2`, tenant, caseID))
+	if err != nil {
+		return Case{}, err
+	}
+	if s.OnClose != nil && IsTerminal(to) {
+		if err := s.OnClose(ctx, tx, tenant, out, a.ID); err != nil {
+			return Case{}, err
+		}
+	}
+	return out, nil
 }
 
-// Assign sets the owner of a case.
+// Assign sets the owner of a case. If a routing service is configured and the assignee
+// has active delegations, it routes the assignment to the active delegate up to max hops.
 func (s *Service) Assign(ctx context.Context, tx pgx.Tx, tenant, caseID uuid.UUID, a Actor, owner uuid.UUID) error {
 	c, err := s.Get(ctx, tx, tenant, caseID)
 	if err != nil {
 		return err
 	}
-	if _, err := tx.Exec(ctx, `UPDATE cases SET owner_id = $3, version = version + 1, updated_at = now() WHERE tenant_id = $1 AND id = $2`, tenant, caseID, owner); err != nil {
+	effectiveOwner := owner
+	var via []uuid.UUID
+	if s.Routing != nil {
+		if routed, err := s.Routing.Assignee(ctx, tx, tenant, owner, s.now()); err == nil {
+			effectiveOwner = routed.Assignee
+			via = routed.Via
+		}
+	}
+	if _, err := tx.Exec(ctx, `UPDATE cases SET owner_id = $3, version = version + 1, updated_at = now() WHERE tenant_id = $1 AND id = $2`, tenant, caseID, effectiveOwner); err != nil {
 		return err
 	}
-	return s.addEvent(ctx, tx, tenant, caseID, a, "assigned", c.Status, c.Status, "", map[string]any{"owner": owner.String()})
+	detail := map[string]any{"owner": effectiveOwner.String()}
+	if len(via) > 0 {
+		detail["delegated_from"] = owner.String()
+		detail["delegation_hops"] = len(via)
+	}
+	if err := s.addEvent(ctx, tx, tenant, caseID, a, "assigned", c.Status, c.Status, "", detail); err != nil {
+		return err
+	}
+	return s.audit(ctx, tx, tenant, a, "case.assigned", c, detail)
+}
+
+// AutoAssign routes a case to an active on-call staff member for the specified role.
+// If nobody is on call, it moves the case to the role's queue.
+func (s *Service) AutoAssign(ctx context.Context, tx pgx.Tx, tenant, caseID uuid.UUID, a Actor, role string) (*Case, error) {
+	if s.Routing == nil {
+		return nil, errors.New("cases: routing service not configured")
+	}
+	c, err := s.Get(ctx, tx, tenant, caseID)
+	if err != nil {
+		return nil, err
+	}
+	onCall, err := s.Routing.OnCall(ctx, tx, tenant, role, s.now())
+	if err != nil {
+		return nil, fmt.Errorf("cases: check on-call: %w", err)
+	}
+	if len(onCall) == 0 {
+		if _, err := tx.Exec(ctx, `UPDATE cases SET queue = $3, version = version + 1, updated_at = now() WHERE tenant_id = $1 AND id = $2`, tenant, caseID, role); err != nil {
+			return nil, err
+		}
+		if err := s.addEvent(ctx, tx, tenant, caseID, a, "queue_assigned", c.Status, c.Status, "", map[string]any{"queue": role}); err != nil {
+			return nil, err
+		}
+		updated, err := s.Get(ctx, tx, tenant, caseID)
+		return &updated, err
+	}
+	if err := s.Assign(ctx, tx, tenant, caseID, a, onCall[0]); err != nil {
+		return nil, err
+	}
+	updated, err := s.Get(ctx, tx, tenant, caseID)
+	return &updated, err
+}
+
+// Escalate moves a case to a higher escalation tier (e.g. SUPERVISOR), bumps priority to CRITICAL,
+// assigns the on-call supervisor if available, records history, and emits a case.escalated event.
+func (s *Service) Escalate(ctx context.Context, tx pgx.Tx, tenant, caseID uuid.UUID, a Actor, targetRole, reason string) (*Case, error) {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return nil, fmt.Errorf("%w: escalation reason is required", ErrInvalid)
+	}
+	c, err := s.Get(ctx, tx, tenant, caseID)
+	if err != nil {
+		return nil, err
+	}
+	if targetRole == "" {
+		targetRole = "SUPERVISOR"
+	}
+
+	var escalatedTo *uuid.UUID
+	if s.Routing != nil {
+		if onCall, err := s.Routing.OnCall(ctx, tx, tenant, targetRole, s.now()); err == nil && len(onCall) > 0 {
+			escalatedTo = &onCall[0]
+		}
+	}
+
+	now := s.now()
+	query := `UPDATE cases SET priority = 'CRITICAL', queue = $3, version = version + 1, updated_at = $4`
+	args := []any{tenant, caseID, targetRole, now}
+	if escalatedTo != nil {
+		query += `, owner_id = $5 WHERE tenant_id = $1 AND id = $2`
+		args = append(args, *escalatedTo)
+	} else {
+		query += ` WHERE tenant_id = $1 AND id = $2`
+	}
+
+	if _, err := tx.Exec(ctx, query, args...); err != nil {
+		return nil, fmt.Errorf("cases: escalate update: %w", err)
+	}
+
+	eventDetail := map[string]any{"target_role": targetRole, "reason": reason}
+	if escalatedTo != nil {
+		eventDetail["escalated_to_user"] = escalatedTo.String()
+	}
+	if err := s.addEvent(ctx, tx, tenant, caseID, a, "escalated", c.Status, c.Status, "", eventDetail); err != nil {
+		return nil, err
+	}
+	if err := s.audit(ctx, tx, tenant, a, "case.escalated", c, eventDetail); err != nil {
+		return nil, err
+	}
+
+	emitFields := map[string]any{
+		"case_id":           caseID.String(),
+		"case_ref":          c.Ref,
+		"escalated_to_role": targetRole,
+		"reason":            reason,
+	}
+	if escalatedTo != nil {
+		emitFields["escalated_to_user"] = escalatedTo.String()
+	}
+	_, _ = events.Emit(ctx, tx, tenant, events.Event{
+		Type:        events.CaseEscalated,
+		AggregateID: caseID.String(),
+		Key:         fmt.Sprintf("%s:esc:%d", caseID, now.Unix()),
+		Fields:      emitFields,
+		OccurredAt:  now,
+	})
+
+	updated, err := s.Get(ctx, tx, tenant, caseID)
+	if err != nil {
+		return nil, err
+	}
+	return &updated, nil
+}
+
+// SweepBreachedSLAs detects all open cases whose SLA deadline has passed, sets their priority
+// to CRITICAL, triggers automated escalation to SUPERVISOR, and emits a case.sla_breached event.
+func (s *Service) SweepBreachedSLAs(ctx context.Context, tx pgx.Tx, tenant uuid.UUID) ([]Case, error) {
+	now := s.now()
+	rows, err := tx.Query(ctx, `SELECT id FROM cases
+		WHERE tenant_id = $1
+		  AND status NOT IN ('RESOLVED', 'CLOSED', 'CLOSED_NO_EXCEPTION', 'CLOSED_CUSTOMER_ERROR', 'SUPPRESSED')
+		  AND sla_due_at IS NOT NULL
+		  AND sla_due_at < $2
+		ORDER BY sla_due_at`, tenant, now)
+	if err != nil {
+		return nil, fmt.Errorf("cases: query breached slas: %w", err)
+	}
+	defer rows.Close()
+
+	var caseIDs []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		caseIDs = append(caseIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	var breached []Case
+	for _, id := range caseIDs {
+		c, err := s.Get(ctx, tx, tenant, id)
+		if err != nil {
+			continue
+		}
+		if c.Priority != "CRITICAL" {
+			_, _ = tx.Exec(ctx, `UPDATE cases SET priority = 'CRITICAL', version = version + 1, updated_at = $3 WHERE tenant_id = $1 AND id = $2`, tenant, id, now)
+			c.Priority = "CRITICAL"
+		}
+		_ = s.addEvent(ctx, tx, tenant, id, System, "sla_breached", c.Status, c.Status, "", map[string]any{
+			"sla_due_at":  c.SLADueAt.UTC().Format(time.RFC3339),
+			"breached_at": now.UTC().Format(time.RFC3339),
+		})
+		_, _ = events.Emit(ctx, tx, tenant, events.Event{
+			Type:        events.CaseSLABreached,
+			AggregateID: id.String(),
+			Key:         fmt.Sprintf("%s:sla:%d", id, now.Unix()),
+			Fields: map[string]any{
+				"case_id":        id.String(),
+				"case_ref":       c.Ref,
+				"classification": c.Classification,
+				"priority":       c.Priority,
+				"sla_due_at":     c.SLADueAt.UTC().Format(time.RFC3339),
+				"breached_at":    now.UTC().Format(time.RFC3339),
+			},
+			OccurredAt: now,
+		})
+		if escalated, err := s.Escalate(ctx, tx, tenant, id, System, "SUPERVISOR", "Automated regulatory SLA breach escalation"); err == nil {
+			breached = append(breached, *escalated)
+		} else {
+			breached = append(breached, c)
+		}
+	}
+	return breached, nil
 }
 
 // History returns a case's history, oldest first.

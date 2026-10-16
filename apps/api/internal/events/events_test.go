@@ -24,8 +24,8 @@ func TestEventDefinitionsCarryNoSensitiveFieldNames(t *testing.T) {
 			}
 		}
 	}
-	if len(Types()) != 8 {
-		t.Fatalf("expected the eight approved event types, got %v", Types())
+	if len(Types()) != 10 {
+		t.Fatalf("expected the ten approved event types, got %v", Types())
 	}
 }
 

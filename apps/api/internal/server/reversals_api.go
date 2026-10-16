@@ -110,6 +110,14 @@ func writeReversalError(w http.ResponseWriter, r *http.Request, err error) {
 		httpx.WriteError(w, r, http.StatusForbidden, "SELF_APPROVAL", "you cannot approve a reversal you requested")
 	case errors.Is(err, authz.ErrConflictOfInterest):
 		httpx.WriteError(w, r, http.StatusForbidden, "CONFLICT_OF_INTEREST", "you are linked to an account involved and cannot approve this")
+	case errors.Is(err, reversal.ErrGateOverrideNotAllowed):
+		httpx.WriteError(w, r, http.StatusForbidden, httpx.CodeForbidden, err.Error())
+	case errors.Is(err, reversal.ErrGateOverrideSameActor):
+		httpx.WriteError(w, r, http.StatusForbidden, "SELF_APPROVAL", err.Error())
+	case errors.Is(err, reversal.ErrGateOverrideMFA):
+		httpx.WriteError(w, r, http.StatusForbidden, "MFA_REQUIRED", err.Error())
+	case errors.Is(err, reversal.ErrGateOverrideDecided):
+		httpx.WriteError(w, r, http.StatusConflict, httpx.CodeConflict, err.Error())
 	case errors.Is(err, authz.ErrForbidden):
 		httpx.WriteError(w, r, http.StatusForbidden, httpx.CodeForbidden, "you may not do this, or the amount is over your approval limit")
 	case errors.Is(err, cases.ErrInvalid):
@@ -367,6 +375,114 @@ func (s *Services) listApprovals(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+type proposeOverrideRequest struct {
+	Justification string `json:"justification"`
+}
+
+type decideOverrideRequest struct {
+	Approve bool   `json:"approve"`
+	Reason  string `json:"reason"`
+}
+
+type gateOverrideJSON struct {
+	ID             string     `json:"id"`
+	ReversalID     string     `json:"reversal_id"`
+	ProposerID     string     `json:"proposer_id"`
+	ApproverID     string     `json:"approver_id,omitempty"`
+	Justification  string     `json:"justification"`
+	Status         string     `json:"status"`
+	DecisionReason string     `json:"decision_reason,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	DecidedAt      *time.Time `json:"decided_at,omitempty"`
+}
+
+func toGateOverrideJSON(o reversal.GateOverride) gateOverrideJSON {
+	out := gateOverrideJSON{
+		ID:             o.ID.String(),
+		ReversalID:     o.ReversalID.String(),
+		ProposerID:     o.ProposerID.String(),
+		Justification:  o.Justification,
+		Status:         o.Status,
+		DecisionReason: o.DecisionReason,
+		CreatedAt:      o.CreatedAt,
+		DecidedAt:      o.DecidedAt,
+	}
+	if o.ApproverID != nil {
+		out.ApproverID = o.ApproverID.String()
+	}
+	return out
+}
+
+// proposeGateOverride serves POST /v1/reversals/{id}/override-proposal.
+func (s *Services) proposeGateOverride(w http.ResponseWriter, r *http.Request) {
+	p, _, ok := s.scopeAtLeast(w, r, "override_gate", "override_dual")
+	if !ok {
+		return
+	}
+	revID, err := uuid.Parse(pathParam(r, "id"))
+	if err != nil {
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeBadRequest, "id must be a UUID")
+		return
+	}
+	var req proposeOverrideRequest
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
+		return
+	}
+	res, err := s.Reversal.ProposeGateOverride(r.Context(), p.TenantID, revID, &p, req.Justification)
+	if err != nil {
+		writeReversalError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, toGateOverrideJSON(res))
+}
+
+// decideGateOverride serves POST /v1/reversals/overrides/{id}/decision.
+func (s *Services) decideGateOverride(w http.ResponseWriter, r *http.Request) {
+	p, _, ok := s.scopeAtLeast(w, r, "override_gate", "override_dual")
+	if !ok {
+		return
+	}
+	overrideID, err := uuid.Parse(pathParam(r, "id"))
+	if err != nil {
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeBadRequest, "id must be a UUID")
+		return
+	}
+	var req decideOverrideRequest
+	if err := httpx.DecodeJSON(w, r, &req); err != nil {
+		httpx.WriteError(w, r, http.StatusBadRequest, httpx.CodeBadRequest, "invalid request body")
+		return
+	}
+	res, err := s.Reversal.DecideGateOverride(r.Context(), p.TenantID, overrideID, &p, req.Approve, req.Reason)
+	if err != nil {
+		writeReversalError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, toGateOverrideJSON(res))
+}
+
+type recoverTimeoutsResponse struct {
+	ProcessedCount int                       `json:"processed_count"`
+	Results        []reversal.RecoveryResult `json:"results"`
+}
+
+// recoverTimeouts serves POST /v1/reversals/recover-timeouts.
+func (s *Services) recoverTimeouts(w http.ResponseWriter, r *http.Request) {
+	p, _, ok := s.scopeAtLeast(w, r, "view_exception_queue", "full")
+	if !ok {
+		return
+	}
+	results, err := s.Reversal.RecoverTimeouts(r.Context(), p.TenantID, 5*time.Minute)
+	if err != nil {
+		writeReversalError(w, r, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, recoverTimeoutsResponse{
+		ProcessedCount: len(results),
+		Results:        results,
+	})
 }
 
 // requestReapproval serves POST /v1/reversals/{id}/reapproval, the safe route back

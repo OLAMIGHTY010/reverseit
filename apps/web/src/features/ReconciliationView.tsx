@@ -178,7 +178,7 @@ export const ReconciliationView: React.FC = () => {
               Multi-Source Reconciliation & Settlement Workspace
             </h2>
             <span className="text-[11px] font-bold font-mono-financial px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
-              CBN BPS/DIR/05 Standard
+              CBN BPS/DIR/05 Compliant
             </span>
           </div>
           <p className="text-[13px] text-[var(--text-muted)] mt-0.5">

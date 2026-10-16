@@ -26,7 +26,7 @@ jobs:
         working-directory: apps/api
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:16
         env:
           POSTGRES_USER: app
           POSTGRES_PASSWORD: ci_only_password
@@ -35,18 +35,18 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd "pg_isready -U app -d smartreversal_test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 20
       redis:
-        image: redis:7-alpine
+        image: redis:7
         ports:
           - 6379:6379
         options: >-
           --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 20
     env:
       TEST_DATABASE_URL: postgres://app:ci_only_password@localhost:5432/smartreversal_test?sslmode=disable
       TEST_REDIS_ADDR: localhost:6379
@@ -71,6 +71,31 @@ jobs:
 
       - name: Run Go Vet & Lints
         run: go vet ./...
+
+      - name: Install PostgreSQL and Redis client tools
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client redis-tools
+
+      - name: Wait for Postgres and Redis
+        run: |
+          for i in $(seq 1 30); do
+            if pg_isready -h localhost -p 5432 -U app -d smartreversal_test; then
+              echo "Postgres is ready"
+              break
+            fi
+            echo "Waiting for Postgres..."
+            sleep 2
+          done
+
+          for i in $(seq 1 30); do
+            if redis-cli -h localhost -p 6379 ping | grep -q PONG; then
+              echo "Redis is ready"
+              break
+            fi
+            echo "Waiting for Redis..."
+            sleep 1
+          done
 
       # Integration tests share one database, so packages run one at a time.
       # A test that skips for lack of services fails this job instead.

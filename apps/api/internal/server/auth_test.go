@@ -164,6 +164,7 @@ func TestEveryNonPublicRouteRequiresAuthentication(t *testing.T) {
 	public := map[string]bool{
 		"GET /v1/health":      true,
 		"GET /v1/ready":       true,
+		"GET /v1/metrics":     true,
 		"POST /v1/auth/login": true,
 	}
 	routes, ok := r.handler.(chi.Routes)

@@ -39,6 +39,8 @@ const (
 const (
 	CaseOpened           = "case.opened"
 	CaseTransitioned     = "case.transitioned"
+	CaseSLABreached      = "case.sla_breached"
+	CaseEscalated        = "case.escalated"
 	ReversalRequested    = "reversal.requested"
 	ReversalApproved     = "reversal.approved"
 	ReversalSubmitted    = "reversal.submitted"
@@ -59,6 +61,8 @@ var reversalFields = []string{"reversal_id", "reversal_ref", "case_id", "txn_id"
 var registry = map[string]definition{
 	CaseOpened:           {StreamCases, []string{"case_id", "case_ref", "classification", "source", "priority", "status", "txn_id"}},
 	CaseTransitioned:     {StreamCases, []string{"case_id", "case_ref", "classification", "from_status", "to_status", "version"}},
+	CaseSLABreached:      {StreamCases, []string{"case_id", "case_ref", "classification", "priority", "sla_due_at", "breached_at"}},
+	CaseEscalated:        {StreamCases, []string{"case_id", "case_ref", "escalated_to_role", "escalated_to_user", "reason"}},
 	ReversalRequested:    {StreamReversals, reversalFields},
 	ReversalApproved:     {StreamReversals, reversalFields},
 	ReversalSubmitted:    {StreamReversals, reversalFields},

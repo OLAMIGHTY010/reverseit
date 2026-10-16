@@ -1,188 +1,188 @@
-# Remaining backend work: coverage matrix B2 to B11
+# Backend coverage matrix against the v2 Integrated Scope Prompt Pack
 
-Assessment only. No code was written for this document. Baseline: tag `demo-baseline-2026-10-15` at `bcdd89c` (upstream `develop` after PRs #13 and #14; 357 top-level tests passing; demo seed, play and reset verified). Source of requirements: prompts B2 to B11 of the v2 Integrated Scope Prompt Pack, including their "SCOPE v2 ADDITIONS", checked against the Full Scope, Vol 2 and the Complete Playbook (which add no backend requirement of their own, see `requirement-traceability.md`).
+Source of requirements: the pack's Section 7 (contracts), Section 12.2 (shared preamble), Section 12.3 (prompts B0 to B11 with their SCOPE v2 ADDITIONS) and Section 15 (X1 to X3). Architecture is unchanged: Go with Chi, PostgreSQL 16, Redis Streams with a transactional outbox, Ed25519 tokens, row-level tenant isolation. The pack's default Python stack is not adopted; the contracts are met in Go.
 
-Classes: COMPLETE, PARTIAL, NOT IMPLEMENTED, BLOCKED (needs an external decision or party), NOT APPLICABLE. COMPLETE means implemented and covered by a test I could name. Things that work in the demo but only for the demo path are PARTIAL.
+Classes: **COMPLETE** (implemented and covered by a test named here), **PARTIAL**, **MISSING**, **BLOCKED** (needs an external decision or party). "PR #19" is a teammate's open branch (feat/backend-gaps-implementation): it is not merged, its CI fails on formatting, and I have not verified its contents beyond reading its file list, so everything it claims is listed as **OPEN IN PR #19**, not counted as done.
 
-Note: `requirement-traceability.md` still shows most rows as "none" or "stub". It is stale. Refreshing it is the first documentation commit of the plan.
+Everything is synthetic and every money movement is simulated. Targets in the pack (60 s detection, 95 percent automation and so on) are unvalidated goals; this matrix makes no claim that any is met.
 
-## B2 Ingestion, normalisation, correlation, simulator
+Merged since the demo baseline (`demo-baseline-2026-10-15`): #15 matrix, #16 domain events, #17 kill-switch coverage, #18 approval expiry and policy identity, #20 automatic-reversal policy fix and cleanup, #21 file ingestion and quarantine replay, #22 correlation, source health and the simulator, #23 message consumer, pipeline report and multi-channel simulator, #24 declarative rules and source-degradation holds, #25 review items and the shared event contract, #26 and #27 the ReverseIt backend (identity, parser, reports, deadline engine, submission, complaint generator). #28 (customer cases, escalation, feedback, labelled examples) is open.
 
-| # | Requirement | Class | Evidence / gap |
+## Section 7 contracts
+
+| Item | Class | Evidence |
+|---|---|---|
+| 7.1 entities and keys | PARTIAL | Institution, user and role, transaction, event, external ref (`transaction_refs`), account token, exception and case, evidence, complaint (reports), approval, reversal (three tracks), notification, audit event: present. Missing as entities: Incident, ReconRecord (OPEN IN PR #19), AutomationPolicy as a table (policies are versioned configuration plus rules) |
+| 7.2 event envelope | COMPLETE | `internal/txn/event.go`; `TestTheContractExampleEventIsAcceptedAsWritten` posts the pack's example form: refs as a list, bare integer amount, institution_id checked against the credentials, seq, raw_payload_hash, X-Schema-Version 1.x. Responses 202, 200, 409 (with a data-quality audit record), 422 (quarantined), 401 |
+| 7.3 core APIs | PARTIAL | Present: events, transactions, exceptions, cases, PATCH with If-Match, complaints, reversals, approvals, audit, killswitch. Missing: `POST /cases` (manual create), transactions search by free-text `q` and date/amount filters beyond reference, state and rail, audit `?subject=` |
+| 7.4 reversal request | COMPLETE | `server/reversals_test.go`; 409 GATE_FAILED with failed checks |
+| 7.5 source authority matrix | PARTIAL | Source expectations and freshness exist (`internal/sources`); the authority matrix per fact (max staleness per fact) is configuration the bank must supply. BLOCKED on discovery |
+| 7.6 reliability patterns | PARTIAL | Idempotent at-least-once ingestion, outbox, DLQ with replay (`stream`, `txn.Replay`), per-transaction lock, single-writer reversal, idempotency key before submission, per-source freshness. Missing: bounded queue depth limits and load shedding (reported only), circuit breaker and retry with jitter (OPEN IN PR #19), reconciliation-after-outage job |
+
+## B0 and B1 foundations
+
+| Requirement | Class | Evidence |
+|---|---|---|
+| B0 ADR, skeleton, six interface OpenAPI files | COMPLETE | `docs/adr`, `packages/api-contracts/interfaces`, `internal/contract` tests |
+| B1 tenancy, RLS, token resolution | COMPLETE | `platform/db`, RLS on every table, isolation tests in each package |
+| B1 auth, MFA claim, service auth, customer audience | COMPLETE for the development provider | `identity`, `servauth`, `customer`; production IdP BLOCKED |
+| B1 RBAC as data, SoD, conflict check | COMPLETE | `authz`, migration 0005 |
+| B1 tokenisation, masking, reason-gated unmask | COMPLETE | `datashield`, `server/unmask.go` |
+| B1 audit chain, verify, tamper test | COMPLETE | `audit`; external anchoring is a B9 design item |
+| B1 config service with maker-checker and VERIFY tags | COMPLETE | `configsvc` |
+| B1 regulatory clock registry seeded with the Section 5.3 values and statuses | COMPLETE | `configsvc/clockseed.go`; proposals only, none approved |
+| B1 business calendar in WAT, working-day arithmetic | COMPLETE | `bizcal`; `deadline` tests across a weekend and a holiday |
+| B1 kill switch, four scopes, dual control to re-enable, every consumer checks | COMPLETE | `killswitch`, `docs/backend/kill-switch-enforcement.md` |
+| B1 delegation and on-call model | PARTIAL | `routing` package exists; wired to cases only in PR #19 |
+
+## B2 ingestion, correlation, simulator
+
+| # | Requirement | Class | Evidence |
 |---|---|---|---|
-| 1 | REST `/v1/events` adapter | COMPLETE | `server/ingest.go`, `txn/ingest.go`; `server/ingest_test.go`, `txn` tests |
-| 1 | File-drop adapter (CSV/XML/fixed-width), message-consumer adapter, versioned mapping configs | NOT IMPLEMENTED | Only the canonical JSON envelope exists. Interface specs exist in `packages/api-contracts/interfaces/` |
-| 2 | Idempotency 200 / 409 / 422 to dead letter | PARTIAL | 200 and 409 and quarantine done (`TestRepeatedEventsAreIdempotent`, `TestSameReferenceWithDifferentContentIsAConflict`, `TestInvalidEventsAreQuarantinedNotStored`). No data-quality alert on 409. No replay tool for `quarantined_events` (stream DLQ replay exists in `stream/replay.go`) |
-| 3 | Order independence, late events, deterministic projection | COMPLETE | `txn/project.go`; `TestProjectionDoesNotDependOnArrivalOrder`, `TestLateAndOutOfOrderEventsConverge`. Per-source clock-skew computation and exposure: NOT IMPLEMENTED (received time is stored, skew is not computed) |
-| 4 | Correlation by external refs (RRN, STAN, session, ledger id, gateway ref) with confidence rules; unmatched-evidence queue and audited manual link | NOT IMPLEMENTED | Correlation today is `instruction_ref` only, plus `session_id` stored. Quarantine is not a manual-link queue |
-| 5 | Lifecycle projection incl. UNKNOWN, CONFLICTING, REVERSED | COMPLETE | `TestProjectionStates`, `TestATimeoutNeverBecomesAFailure`. Missing: separate SENT state and finer REVERSAL_* states (PARTIAL detail) |
-| 6 | Source freshness (fresh/stale/down) exposed via API and attached to evidence | NOT IMPLEMENTED | |
-| 7 | Backpressure, lag metrics, spill to disk | NOT IMPLEMENTED | Redis Streams give buffering; no bounds, no lag metric |
-| 8 | Simulator: CLI/API, 18 named scenarios with seeds and ground-truth label file, burst, clock skew, outages | PARTIAL | Only the 3-case `internal/demo` scenario. Mock services `cmd/mock` are 501 stubs (`internal/mocks`). Simulated status, ledger, provider exist as DB tables in `reversal/sources.go` |
-| 9 | Property tests; shuffled replay yields identical state | PARTIAL | Order test exists for the projection; no shuffled whole-scenario replay, no property-based test |
-| v2 | Source types NIP, POS, ATM, card, mobile, internet, USSD, gateway, merchant; field list (debit/credit/switch/settlement status, retry count) | PARTIAL | Channel allow-list and rail pattern exist (`txn/event.go`). Switch, settlement and retry-count fields are not in the envelope |
-| v2 | 50-transaction demo with one unknown, deterministic seed, time acceleration, detection latency p50/p95 | NOT IMPLEMENTED | |
+| 1 | REST, file-drop (CSV, XML, fixed width) and message-consumer adapters, versioned mappings | COMPLETE | `internal/feed` (`POST /v1/feeds/{mapping}/files`), `internal/inbound` (stream `events.inbound`, wired into the worker); settlement and NIBSS response files are B6 |
+| 2 | Idempotency 200 / 409 with data-quality alert / 422 to DLQ with replay tool | COMPLETE | `TestTheSameEventDeliveredConcurrentlyIsStoredOnceAndReportedAsADuplicate` (a real race fixed here), `txn/quarantine.go`, `/v1/quarantine` replay and discard |
+| 3 | Ordering, late events, deterministic projection, clock skew per source | COMPLETE | `txn/project.go`; `sources` p50 and p95 skew; `simrun` reordering and redelivery tests |
+| 4 | Correlation by external reference with confidence, unmatched queue, audited manual link, never account+amount+time alone | COMPLETE | `internal/correlate`, `/v1/observations`, `/v1/evidence` |
+| 5 | Lifecycle projection | PARTIAL | States exist (INITIATED, DEBITED, PENDING, CONFIRMED_*, UNKNOWN, CONFLICTING, REVERSED). SENT and the REVERSAL_* sub-states are not separate |
+| 6 | Source freshness fresh/stale/down, attached to evidence | PARTIAL | `GET /v1/sources`; degraded sources shown on review items and used to hold findings. Freshness is not yet attached to each evidence item in a case |
+| 7 | Backpressure, lag, load shedding that never drops | PARTIAL | `GET /v1/pipeline` reports outbox backlog and stream lag, pending and dead letters. No bound on queue depth, no spill to disk |
+| 8 | Simulator: 18 named scenarios, seeds, ground-truth file, outage, skew, burst | PARTIAL | `internal/sim` (18 scenarios, 50-transaction mix with one unknown, jitter, redelivery, outage, skew), `cmd/sim`, `internal/simrun`. Not yet: reversal timeout, reversal rejected, late success after reversal, channel incident spike, malformed events, burst and time-acceleration mode over HTTP |
+| 9 | Property tests; shuffled replay gives identical state | PARTIAL | Reordering with 30 percent redelivery leaves every lifecycle correct (`TestRedeliveryAndReordering...`). No property-based generator |
+| v2 | Detection latency from source event time to case creation, p50 and p95 | PARTIAL | `simrun` reports p50, p95 and max in simulated time, measured from first debit; not from the deciding event, and not a performance figure |
 
-## B3 Rules engine and detectors
+## B3 rules engine and detectors
 
-| # | Requirement | Class | Evidence / gap |
+| # | Requirement | Class | Evidence |
 |---|---|---|---|
-| 1 | Declarative versioned rules, shadow mode, maker-checker, rollback | NOT IMPLEMENTED | Detectors are Go code with a `RuleVersion` constant (`detect/detect.go`). Thresholds are configurable (config service) |
-| 2 | Detectors | PARTIAL | Done: DUP (EX-DUP) , DNC/FAIL001 (confirmed failure), UNK001, stuck sweep, late success closure; tests in `detect` (11). Missing: EX-INC, RVF/RVP (REV001 is opened by reversal failure only), FEE, VND, ATM, LTE (late success after reversal), MIS, RTY, DLY, STL (B6). DUP uses reference/session/settlement and a window, no allow-list for legitimate repeat payments |
-| 3 | Exception record contents | PARTIAL | Case carries code, severity, exposure, rule id/version, root cause, evidence, explanation. Missing: confidence/outcome field, recommended next step, lane |
-| 4 | Degraded-source marker and suppress/relabel | NOT IMPLEMENTED | Depends on B2 #6 |
-| 5 | Re-query ladder with self-healing closure | PARTIAL | Late success closes a case (`TestATimeoutIsUnknownNotFailureAndALateSuccessClosesTheCase`); the sweep finds stuck transactions. No scheduler that queries the status source at configured intervals |
-| 6 | Exposure: gross flagged, submitted, reversed, net | PARTIAL | `exposure_minor` per case; the four separate numbers are not computed |
-| 7 | Configurable explainable priority score | PARTIAL | Fixed `priorityFor(code, risk)` in `cases/cases.go`. No weights for amount, age, SLA, repeat complaints |
-| 8 | Golden-case suite with precision and recall, adversarial cases | NOT IMPLEMENTED | Unit tests cover some non-duplicate cases (`TestThingsThatAreNotDuplicates`) |
-| v2 | Risk grade High/Medium/Low | COMPLETE | `TestDuplicateDebitsAreFlaggedOnTheLaterOneAndGradedBySession`, `TestDifferentSessionsAreMediumRisk` |
-| v2 | Never treat unknown as failed; status query first | COMPLETE | `TestATimeoutNeverBecomesAFailure`, `TestUnknownPendingConflictingAndSuccessfulOutcomesAreNeverReversed` |
-| v2 | Duplicate posting vs duplicate transfer; ML hook (A5) | NOT IMPLEMENTED / BLOCKED | ML hook needs the AI owner's agreement |
-| v2 | Codes DUP001, FAIL001, UNK001, REV001, STL001, CUS001 and proposed extensions | PARTIAL | Pattern allows any code; only the first three are produced by detectors, REV001 by reversal, CUS001 by complaints |
+| 1 | Declarative versioned rules, shadow mode, maker-checker, rollback | COMPLETE for conditions on one transaction | `internal/rules`, `/v1/rules`, `docs/backend/detection-rules.md`. Missing from the pack's model: scope (tenant, rail, channel) as a field, thresholds referencing config keys, severity mapping, recommended lane, explanation template with fields |
+| 2 | Detectors EX-DUP, DNC, INC, STK, RVF, RVP, FEE, VND, ATM, LTE, MIS, RTY | PARTIAL | Built in: DUP001, FAIL001 (DNC), UNK001, stuck sweep, ATM001, FEE001, VND001, MIS001, INC001 (the last five are rail-keyed conventions from a teammate's PR). Missing: REV001 detectors RVF and RVP beyond reversal failure, EX-LTE (late success after reversal), EX-RTY (retry), EX-DLY; legitimate-repeat allow-list beyond reference/session/window |
+| 3 | Exception record contents | PARTIAL | Missing confidence or rule outcome field, recommended next step, lane |
+| 4 | Degraded-source marker and suppress policy | COMPLETE for UNK001 and DUP001 | `detect/degraded.go`, `docs/backend/source-degradation.md`; simulator outage: unexpected UNK001 10 to 0 |
+| 5 | Re-query ladder with self-healing closure | PARTIAL | Late success closes an unknown case. No scheduler that asks the status source at configured intervals |
+| 6 | Exposure: gross flagged, submitted, reversed, net resolved | MISSING | `exposure_minor` per case only |
+| 7 | Configurable explainable priority score | MISSING | Fixed `priorityFor` |
+| 8 | Golden-case suite, precision and recall, adversarial cases | COMPLETE for the labelled synthetic set | `internal/simrun`; `docs/backend/simulator.md`. Precision and recall 1.00 on 23 labelled transactions; the set is small and written by the same team, so this is not an accuracy claim |
+| v2 | Risk grade, unknown never failed, codes | COMPLETE | detect tests; rule validation forbids it |
+| v2 | ML score hook (A5) | BLOCKED | AI developer's interface |
 
-## B4 Cases, state machine, SLA, complaints
+## B4 cases, state machine, SLA, complaints
 
-| # | Requirement | Class | Evidence / gap |
+| # | Requirement | Class | Evidence |
 |---|---|---|---|
-| 1 | State machine, server-side validation, reason codes, side states | COMPLETE for the generic machine | `cases/cases.go`; `TestStateMachineAllowsOnlyDefinedMoves`, `TestTransitionsAreValidatedVersionedAndRecorded`. Per-exception-type workflow definitions: NOT IMPLEMENTED (one machine for all types) |
-| 2 | Ownership: rule-based assignment, manual assign, team queues, reassign, bulk with audit | NOT IMPLEMENTED | `owner_id` column only. `routing` package (delegations, on-call, escalation steps, from B1) is not wired to cases. `team` scope is blocked by D21 |
-| 3 | SLA: deadline from approved clocks, customer resolution clock, pause for external dependency, breach events, escalation ladder | PARTIAL | Deadline from approved clocks is done (`TestDeadlinesComeOnlyFromApprovedClocks`). No pause rules, breach or approaching-breach events, escalation execution, customer clock separate from case SLA |
-| 4 | Notes, attachments (virus-scanned, hashed), evidence links, linked cases, resolution codes | PARTIAL | Notes and evidence done (`server/cases_test.go`). No attachments or scanning, no linked cases, no additional-check requests |
-| 5 | Complaint intake with matcher and outcomes | PARTIAL | Exact-reference join or new CUS001 or unmatched claim (`TestComplaintsJoinTheDetectedCaseOrOpenACustomerCase`). No fuzzy match with confidence, no "verified-successful fast closure pack", no repeat-contact counter, no no-match guidance |
-| 5 | Customer-safe status vocabulary | COMPLETE | `TestCustomerStatusNeverPromisesMoneyBeforeVerification` |
-| 6 | Search and saved views | PARTIAL | Queue filters and cursor paging done. Search by reference/amount/date and saved views not done |
-| 7 | Domain events via outbox for every transition | NOT IMPLEMENTED | Cases, reversals and notifications do not write to the outbox. The outbox is used for transaction updates only. This blocks analytics and B7 alerts that react to transitions |
-| v2 | Case fields incl. internal target separate from regulatory deadline | PARTIAL | `sla_due_at` only; `internal_target_at` missing |
+| 1 | State machine, validation, reason codes, side states | PARTIAL | One machine for all types (COMPLETE); per-type workflow definitions MISSING |
+| 2 | Ownership, assignment, queues, bulk | MISSING / OPEN IN PR #19 | |
+| 3 | SLA and customer resolution clock, pause, breach events, escalation | PARTIAL | Deadline from approved clock; internal target kept apart (`cases.internal_target_at`, `deadline` engine). Pause, breach and approaching events: MISSING (SLA breach escalation OPEN IN PR #19) |
+| 4 | Notes, attachments (scanned), evidence links, linked cases | PARTIAL | Notes and evidence yes. Attachments with scanning, linked cases, additional-check requests: MISSING |
+| 5 | Complaint intake and matcher | COMPLETE for the customer path | `creport` (exact reference, ranked candidates, repeat contact counter, verified-successful and already-reversed packs, unmatched claim). The agent path `POST /v1/complaints` still matches by exact reference only |
+| 6 | Search and saved views | PARTIAL | |
+| 7 | Domain events through the outbox | COMPLETE | `docs/backend/domain-events.md` |
+| v2 | Case fields incl. internal target and regulatory deadline apart | COMPLETE | |
 
-## B5 Controlled reversal
+## B5 controlled reversal
 
-| # | Requirement | Class | Evidence / gap |
+| # | Requirement | Class | Evidence |
 |---|---|---|---|
-| 1 | Eight-check gate, unknown means hold, stale evidence cannot pass, all failed checks returned | COMPLETE | `reversal/gate.go`; `TestEachOfTheEightChecksCanBlock`, `TestUnknownPending...`, `TestEvidenceThatChangesBetweenApprovalAndExecution...`; `server/reversals_test.go` |
-| 2 | Remediation lock | COMPLETE for in-platform | Unique index plus `TestOnlyOneLiveReversalCanExistPerTransactionEvenUnderConcurrency`. Detecting remediation done outside the platform: NOT IMPLEMENTED (BLOCKED on data availability) |
-| 3 | Policy decision AUTO / NEEDS_APPROVAL / MANUAL_ONLY / BLOCKED with reasons and version; time-of-day, rollout %, confidence only additional | PARTIAL | Verdicts PASS_AUTO, PASS_NEEDS_APPROVAL, BLOCKED with policy version. No MANUAL_ONLY, time-of-day or rollout rules |
-| 4 | Approvals: maker-checker, limits, re-validation at execution, rejection returns case to investigation | PARTIAL | Done and tested (`TestApprovalRulesAreEnforced`, DB trigger). Approval expiry and higher-limit escalation chain NOT IMPLEMENTED |
-| 4 | Unknown-status REVIEW items with dual-approver override and fresh evidence | NOT IMPLEMENTED | We block unknown outright (safer than the scope). Override needs a product decision |
-| 5 | Execution: key persisted before call, timeout is UNKNOWN, retry with same key | COMPLETE against simulated provider | `TestATimeoutIsUnknownAndTheSameKeyFindsOutWhatHappenedWithoutPostingTwice`. Bounded retries with jitter and circuit breaker: NOT IMPLEMENTED |
-| 6 | Verification from ledger | PARTIAL | `TestAProviderThatClaimsSuccessWithoutAPostingIsCaught`, delayed posting test. Missing: fee reconciliation, partial reversal, restricted or closed account, recovery sub-case, post-reversal watch window for late success |
-| 7 | Manual reversal recording and linking | NOT IMPLEMENTED | |
-| 8 | Notification only after verification, deduplicated | COMPLETE | `TestConfirmedFailureIsReversedVerifiedAndOnlyThenReportedToTheCustomer`; failure and retry of delivery belongs to B7 |
-| 9 | Kill switch: freeze submissions, park in-flight, reconcile after unfreeze | PARTIAL | `TestTheKillSwitchStopsAutomationAtEveryScope`, `TestAFreezeAfterApproval...` . "Park and reconcile after unfreeze" not explicit. The kill switch is checked only by the reversal service; ingestion, detector, scheduler and notifications do not check it ("every consumer checks it") |
-| 10 | Chaos tests | PARTIAL | Timeout, duplicate request, concurrency, freeze mid-flight, delayed posting covered. Missing: concurrent maker vs automation, late success after reversal |
-| v2 | REV001 on failure; scripted mock status and reversal services | PARTIAL | `TestARejectedReversalFails...`. Scripting is in DB tables, not the HTTP mock services of B11 |
+| 1 | Eight-check gate, unknown is HOLD, stale evidence cannot pass | COMPLETE | `reversal/gate.go` tests |
+| 2 | Remediation lock | COMPLETE for in-platform | Remediation started outside the platform BLOCKED on data |
+| 3 | Policy decision AUTO / NEEDS_APPROVAL / MANUAL_ONLY / BLOCKED | PARTIAL | No MANUAL_ONLY, time-of-day or rollout percentage |
+| 4 | Approvals with expiry and revalidation; policy change invalidates | COMPLETE | `docs/backend/approval-expiry.md`; an automatic reversal also stops when policy tightens (PR #20). Higher-limit chains MISSING |
+| 4 | Unknown-status REVIEW items; dual-approver override with fresh evidence | PARTIAL | Review items listed, never releasable (`GET /v1/review-items`). The dual-approver override is OPEN IN PR #19 and needs a product decision |
+| 5 | Execution: key before call, timeout is UNKNOWN, circuit breaker and bounded retries | PARTIAL | Key and unknown handling COMPLETE; breaker and retries OPEN IN PR #19 |
+| 6 | Verification from the ledger, partial, fee, restricted account, recovery sub-case, watch window | PARTIAL | Ledger verification COMPLETE; others MISSING / OPEN IN PR #19 (recovery) |
+| 7 | Manual reversal recording | MISSING | |
+| 8 | Customer notices only after verification, deduplicated | COMPLETE | notify tests |
+| 9 | Kill switch freeze, park, reconcile | COMPLETE | |
+| 10 | Chaos tests | PARTIAL | |
 
-## B6 Reconciliation
+## B6 reconciliation
 
-| # | Requirement | Class | Evidence / gap |
+All items MISSING on develop. PR #19 contains settlement file ingestion and break detection (not merged, not verified by me). The reversal reconciliation view exists (`GET /v1/reconciliation/reversals`).
+
+## B7 incidents, alerts, notifications
+
+| Requirement | Class | Evidence |
+|---|---|---|
+| Incident grouping and spike detection | COMPLETE (PR #30) | `internal/incidents`; `docs/backend/alerts-and-incidents.md`; needs approved `incident.*` keys |
+| Alert service: routing, dedupe, suppression, acknowledge, escalate | COMPLETE (PR #30) | `internal/alerts`, `/v1/alerts`, worker `opsAll`; needs approved `alert.*` keys |
+| Customer notifications: templates, dedupe, two-stage, never "returned" before VERIFIED | COMPLETE | |
+| Delivery tracking, retry, fallback channel, opt-out, wrong-number guard, contact-change guard | MISSING | Provider adapters OPEN IN PR #19 (telecom) |
+| Customer report received acknowledgement | COMPLETE | `notify.CustomerReportReceived` |
+| Test sink adapter | PARTIAL | Notifications are stored as recorded and simulated |
+
+## B8 reporting, integration health, observability
+
+| Requirement | Class | Evidence |
+|---|---|---|
+| Metrics catalogue and the listed metrics | COMPLETE (PR #31) | `internal/metrics`, `GET /v1/metrics`, `/v1/metrics/catalogue`, plus summary, pipeline and sources |
+| Controlled exports | MISSING | |
+| Integration health | PARTIAL | Source freshness and pipeline backlog; per-adapter success rate and circuit state MISSING |
+| OpenTelemetry, metrics endpoint | OPEN IN PR #19 | |
+| Data lineage | PARTIAL | Rule id and version on every case; evaluations recorded per rule |
+| Dashboards: operations, executive, customer timeline | PARTIAL | Customer timeline COMPLETE; others via summary only |
+
+## B9 security and resilience
+
+| Requirement | Class | Evidence |
+|---|---|---|
+| STRIDE threat model | MISSING | `docs/security/threat-model.md` is a stub |
+| Secure headers, rate limits beyond unmask and customer reports, upload security | PARTIAL | Customer report rate limit COMPLETE; file imports bounded and DTD-free; headers not reviewed |
+| Dependency scanning | PARTIAL | `govulncheck` run by hand: no vulnerabilities in code paths (run 16 Oct 2026, v1.9.0). Not a CI step. Container scanning MISSING |
+| Privacy inventory, retention | MISSING | Counsel review needed |
+| Load, DR restore, game day, runbooks | MISSING | `docs/runbooks/disaster-recovery.md` is a plan |
+| Release checklist, pen-test pack | MISSING | Live execution sign-off is outside engineering |
+| Production MFA and identity | BLOCKED | |
+
+## B10 ReverseIt customer backend
+
+| # | Requirement | Class | Evidence |
 |---|---|---|---|
-| 1 to 3 | Importers, matching strategies, stored matching decisions | NOT IMPLEMENTED | |
-| 3 | EX-STL / STL001 cases with quantified breaks | NOT IMPLEMENTED | Code is allowed by the case pattern only |
-| 4 | Reconcile remediation outcomes against ledger | PARTIAL | `GET /v1/reconciliation/reversals` (`server/reports.go`, `TestReconciliationAndSummary...`) compares reversals to the simulated ledger. Not against settlement records |
-| 5 | Reconciliation workspace API, manual match with approval | NOT IMPLEMENTED | |
-| 6 | Extension points M22, M24 | NOT IMPLEMENTED | |
-| v2 | NIBSS and settlement files with seeded breaks | NOT IMPLEMENTED | Depends on B2 simulator |
+| 1 | Endpoints, customer-only data, idempotency, rate limits | COMPLETE | `internal/server/customer*.go`; cross-customer access returns 404 in every route test |
+| 1 | Customer authentication | COMPLETE for the development provider; production BLOCKED | `internal/customer`; refused in production by configuration |
+| 2 | Intake: consent, redacted copy and hash, never store or log the raw alert | COMPLETE | `TestAReportKeepsOnlyTheRedactedAlertItsHashAndTheConsent`. Image intake stores an opaque reference only |
+| 3 | Parser interface | COMPLETE for the interface and a rule-based stand-in | `internal/alertparse`; the AI developer's parser (A9) is BLOCKED on them |
+| 4 | Matching: exact, then constrained fuzzy with ranked reasons; never auto-link below threshold; unmatched claim; already reversed, already successful, duplicate report, other bank | COMPLETE | `creport` tests. Fuzzy matching is off until `customer_match.window_seconds` is approved |
+| 5 | Dispute classification with a deterministic clock table; CUS002 | COMPLETE | `deadline`, `creport.classify`; ATM reports must state whose machine it was |
+| 6 | Deadline engine: regulatory and internal apart, states, source status | COMPLETE | `deadline` tests; states beyond on_track and overdue need approved percentages |
+| 7 | Complaint generator with validator, template fallback, edits stored | COMPLETE | `internal/complaint`; no model adapter is wired, so the template is always used |
+| 8 | Case submission, ops alert, acknowledgement | COMPLETE | Scope acceptance 5 as `TestAPastedAlertBecomesACustomerCaseWithTheRightCountdownOnTheSharedQueue` |
+| 9 | Status tracker including cases the customer never reported | COMPLETE (PR #28) | |
+| 10 | Escalation ladder from configuration | COMPLETE (PR #28); contents BLOCKED on Compliance | Nothing is seeded; steps need a second person's approval |
+| 11 | Feedback, labelled examples, reopen on dispute | COMPLETE (PR #28) | |
+| 12 | Fraud and abuse | PARTIAL | Parser flags are advisory and stored with the case; rate limit; an unmatched claim cannot move money. No repeated-claim detector |
 
-## B7 Incidents, alerts, notifications
+## B11 automation, mocks, demo controls
 
-| # | Requirement | Class | Evidence / gap |
-|---|---|---|---|
-| 1, 2 | Incident grouping, spike detection | NOT IMPLEMENTED | |
-| 3 | Alert service with routing, dedupe, suppression, acknowledge, escalate | NOT IMPLEMENTED | Ops message templates exist in `notify` but nothing routes them. Needs B4 #7 transition events first |
-| 4 | Customer notification service: templates, dedupe key, delivery tracking, retry, fallback, contact-change guard | PARTIAL | Templates, dedupe, two-stage rule and "no money claim before VERIFIED" are done (`TestNotificationsAreTwoStageDedupedAndNeverPromiseBeforeVerification`). Delivery tracking, retries, provider adapters, opt-out, wrong-number guard NOT IMPLEMENTED. `notify` has no tests of its own |
-| 5 | Test sink adapter | NOT IMPLEMENTED | Rows are recorded with status `recorded` and `simulated: true` |
+| Requirement | Class | Evidence |
+|---|---|---|
+| Schedulers: idempotent, observable, pausable | PARTIAL | Worker runs the detector consumer, inbound consumer, sweeps, rule sweep, hold sweep and reversal sweep; sweeps record job state under a freeze. No job registry, no status-requery, SLA, stale-source, notification-retry or file jobs |
+| HTTP mock services with scripted outcomes | MISSING | `cmd/mock` answers 501; simulated status, ledger and provider live in database tables |
+| OpenAPI for the interfaces and contract tests | PARTIAL | Six interface files and spec tests exist |
+| Config service, hot reload, effective version on each decision | COMPLETE | |
+| Demo controls: seed, scenario files, reset, time acceleration, burst, simulated flag, run-log export | PARTIAL | `cmd/demo` seed, play, reset and the simulated flag; `cmd/sim` seeds and the 50-transaction run. No time acceleration or burst over HTTP, no run-log export |
+| Metrics endpoint | OPEN IN PR #19 | |
+| Buffering and degraded-source state | PARTIAL | Held findings and source health; no buffering of outbound mock calls (there are none) |
 
-## B8 Reporting, integration health, observability
+## Section 15 acceptance
 
-| # | Requirement | Class | Evidence / gap |
-|---|---|---|---|
-| 1 | Metrics catalogue (definition, formula, sources) and the listed metrics | PARTIAL | `GET /v1/reports/summary` gives counts, verified value, automation rate, average resolution time. No catalogue endpoint, no p50/p95, detection latency, SLA compliance, exposure split, false-positive rate |
-| 2 | Controlled exports | NOT IMPLEMENTED | |
-| 3 | Integration health per adapter | NOT IMPLEMENTED | |
-| 4 | OpenTelemetry traces, correlation id, dashboards as code | PARTIAL | Trace ids and structured logs exist (`internal/observability`). No OTel export, no metrics endpoint |
-| 5 | Data lineage | PARTIAL | Cases keep evidence, rule id and version, append-only event history; no lineage query |
-| v2 | Dashboards: ops, executive, customer timeline | PARTIAL | Customer timeline done; others via summary only |
+| Scope acceptance | Class | Evidence |
+|---|---|---|
+| 1 seeded duplicate detected and graded | COMPLETE | demo and detect tests |
+| 2 confirmed failure reversed automatically, customer notified, audit recorded | COMPLETE | demo tests |
+| 3 unknown status not reversed, in the approval queue with evidence | COMPLETE as review items | the pack's "dual-approver override" is not offered for unknown outcomes |
+| 4 second reversal on the same case blocked | COMPLETE | |
+| 5 customer alert parsed, classified, correct countdown, queued as CUS001 | COMPLETE | see B10 |
+| 6 both dashboards reflect the above within seconds | PARTIAL | `reports/summary` reflects it; the executive and operations dashboard data are not separate endpoints |
+| 7 changing a rule in configuration changes behaviour with no code change | COMPLETE | configuration and declarative rules |
+| X1 20 end-to-end scenarios | PARTIAL | Covered by tests in the packages named above: 1, 2, 3, 4, 10, 11, 17. Covered in part: 12 (stale status evidence holds the gate and stale sources hold findings; no feed-outage end-to-end test through the gate), 14 (a customer report joins the exception; no agent view), 15 (classification only; lanes do not exist). Not covered: 5 to 9, 13, 16, 18 to 20 |
+| X2 historical replay and pilot tooling | MISSING | Synthetic replay only |
+| X3 demo hardening | COMPLETE for the baseline demo (earlier) | `docs/runbooks/demo-runbook.md` |
 
-## B9 Security, resilience, release readiness
+## Known conflicts and findings
 
-| # | Requirement | Class | Evidence / gap |
-|---|---|---|---|
-| 1 | STRIDE threat model | NOT IMPLEMENTED | `docs/security/threat-model.md` is a 64-byte stub |
-| 1 | Auth, RBAC matrix, tenant RLS, hash-chained audit, SoD, kill switch, token vault, service assertions | COMPLETE (B1) | Tests across `identity`, `authz`, `audit`, `datashield`, `servauth`, `killswitch`; `TestEveryNonPublicRouteRequiresAuthentication` |
-| 1 | Secrets manager, key rotation plan, rate limiting beyond unmask, secure headers, container scanning | PARTIAL | A CI secret scan exists, and govulncheck was run by hand (not confirmed as a CI step). Rate limit for unmask only. No secure-header or login rate-limit review |
-| 1 | Production MFA | BLOCKED | Dev TOTP only (D20); needs the bank's identity provider |
-| 2 | Privacy: data inventory, retention, legal hold | NOT IMPLEMENTED | Counsel review needed (NDPA) |
-| 3 | Load tests, DR restore test, reconciliation-after-outage, runbooks, game day | NOT IMPLEMENTED | `docs/runbooks/disaster-recovery.md` exists as a plan only |
-| 4, 5 | Release checklist, pen-test pack | NOT IMPLEMENTED | Live execution sign-off is outside engineering |
+- Migration numbers: develop holds 0001 to 0035. PR #19 adds 0022 and 0023 and must be renumbered after merging develop.
+- Findings from the simulator under a source outage that are not fixed: a retry judged before the silent source crosses its stale threshold can still be flagged as a duplicate; a confirmed failure from one source is not superseded when another source's delayed confirmation makes the evidence conflict; a failure delivered together with its reversal opens no failure case (`docs/backend/simulator.md`, `docs/backend/source-degradation.md`).
+- The failure-family detectors for ATM, fee, vendor, mismatch and incomplete routing key off rail or channel names, so a USSD or gateway failure is classified as a vendor drop. That is a convention to confirm with the bank.
 
-## B10 ReverseIt backend
+## Test results at this gate (develop at 2883eff, 16 Oct 2026)
 
-| # | Requirement | Class | Evidence / gap |
-|---|---|---|---|
-| 1 | Customer endpoints, authenticated customer role, own-data only | NOT IMPLEMENTED | No customer audience login. `POST /v1/complaints` is agent-entered. Needs a design decision on customer authentication (BLOCKED on decision) |
-| 2, 3 | Intake of pasted text or image, consent, redaction; parser interface (A9) | NOT IMPLEMENTED / BLOCKED | A9 owned by the AI developer |
-| 4 | Ranked fuzzy matching, unmatched claim, already reversed / successful / duplicate report | PARTIAL | Exact reference match and unmatched claim only |
-| 5 | Dispute classification with deterministic clock mapping; CUS002 path | NOT IMPLEMENTED | Clock registry exists (`configsvc`) |
-| 6 | Deadline engine: regulatory and internal target, states, source status | PARTIAL | Pieces exist (`bizcal`, clocks with status). No on-track/approaching/urgent/overdue state or API; clock values are unverified (D17 to D19) |
-| 7 | Complaint generator | NOT IMPLEMENTED | |
-| 8 | Case submission with ack | PARTIAL | Case creation yes; priority/ops alert/ack partial |
-| 9 | Unified status tracker | COMPLETE for operators | `GET /v1/cases/{id}/customer-status` |
-| 10 | Escalation ladder from configuration | NOT IMPLEMENTED | Contact details need Compliance review |
-| 11 | Feedback loop, labeled examples, reopen on dispute | NOT IMPLEMENTED | |
-| 12 | Fraud and abuse flags | NOT IMPLEMENTED | Unmatched claims already cannot move money (verified by the gate) |
-
-## B11 Automation, mocks, config, demo controls
-
-| # | Requirement | Class | Evidence / gap |
-|---|---|---|---|
-| 1 | Schedulers, idempotent, observable, pausable by kill switch | PARTIAL | Worker runs detector consumer, stuck sweep and reversal sweep (`worker/worker.go`). Sweeps are not kill-switch aware at job level, no job registry or metrics, no SLA, stale-source, notification retry or file jobs. Uses in-process tickers, not Celery/APScheduler (ADR 0002 chose Go) |
-| 2 | HTTP mock services with scripted outcomes, OpenAPI, contract tests | PARTIAL | OpenAPI for six interfaces and spec tests exist (`internal/contract`); mocks answer 501. Simulated adapters are in-database |
-| 3 | Config service, maker-checker, hot reload, effective version on decisions | COMPLETE | `configsvc` (17 tests); gate records `policy_version` |
-| 4 | Demo controls: seed, scenarios, reset, time acceleration, burst, run log export | PARTIAL | seed, play, reset and simulated flag done (`internal/demo`, `TestTheDemonstrationScenarioRunsEndToEndAndCanBeRepeated`). No 50-transaction scenario, acceleration, burst, run-log export |
-| 5 | Metrics endpoint | NOT IMPLEMENTED | |
-| 6 | Buffering and degraded-source state when a mock is down | NOT IMPLEMENTED | |
-
-## Overlaps and cleanup (so nothing is built twice)
-
-- `internal/transactions`, `internal/exceptions` are unwired prototypes superseded by `txn`, `cases`, `detect`. `internal/integrations`, `investigations`, `reconciliation`, `reversals` are empty stubs. Delete or repurpose in one cleanup commit before B6 reuses the `reconciliation` name.
-- `routing` (delegations, on-call, escalation steps) is built and unused. B4 ownership, B4 SLA escalation, B7 alert routing and B10 escalation all need it. Wire it once.
-- The simulated status, ledger and provider live in database tables. B11 HTTP mocks, B2 simulator and B6 file generators should drive those same tables rather than add a second simulation.
-- The reversal reconciliation endpoint should become one view of the B6 matching store, not a separate implementation.
-- Notification persistence (`notifications` table) is the base for B7 delivery tracking; extend it.
-
-## Dependencies, unfinished security controls, decisions
-
-- Domain events from case and reversal transitions (B4 #7) gate B7 alerts, B8 metrics and B11 jobs.
-- Kill switch must be checked by the detector, ingestion decision to accept, scheduler jobs and notification dispatch (B5 #9, B11 #1).
-- Customer authentication design (B10 #1) is a decision, not code. Proposed options: separate customer audience with channel-issued tokens, or agent-proxied only for the hackathon scope.
-- D17 to D19 and approval thresholds, regulatory clocks, calendars remain unverified; every new feature reads them from configuration and blocks when absent.
-- MFA stays development TOTP until the bank names an identity provider.
-- AI-owned interfaces (A5 score, A9 parser): not modified; adapters only, with the owner's agreement.
-- `team` audit scope stays inaccessible until D21 is revisited with ownership in B4.
-
-## Proposed order and ordering conflicts
-
-Prompt order is B2, B3, B4, B5, B6, B7, B8, B9, B10, B11. Two conflicts to flag:
-
-1. **B3 and B4 need B11's config and scheduling pieces and B2's simulator.** Config is already done. A seeded scenario simulator (B2 #8) is needed first so B3 precision and recall can be measured. I propose building the simulator with B2 and not waiting for B11.
-2. **B4 domain events (outbox) are a prerequisite for B7 and B8 but sit in B4.** I propose doing them in B4 as the first item, which keeps the original order.
-3. B5 gaps (watch window, partial reversal, circuit breaker) depend on provider behaviours in the simulator; scheduled after B2/B3.
-
-## Safest next feature
-
-**Domain events for case, reversal and notification transitions through the existing outbox (B4 #7), together with a refreshed traceability matrix.**
-
-Why: it is additive, adds no money movement, does not change any API response, unblocks B7, B8 and B11, and is verifiable by consumers in tests. The demo is untouched.
-
-What already exists: the transactional outbox and relay (`outbox`), Redis Streams consumers with idempotency and DLQ (`stream`), tenant-scoped events, and a clean place to write them (every transition already goes through `cases.Service.Transition`/`RecordEvent` and `reversal` `moveCase`, in the same database transaction as the audit entry).
-
-Proposed commits, each with its tests:
-
-1. `docs: refresh requirement traceability to match the implemented backend` (this matrix becomes the source; no code).
-2. `feat(events): event type registry and enqueue helper for domain events` (names, versioned payload with ids only, no personal data; test that payloads carry no account numbers).
-3. `feat(cases): emit case.opened and case.transitioned through the outbox in the same transaction` (tests: atomic with the transition, rolled back with it, not duplicated on idempotent reopen).
-4. `feat(reversal): emit reversal.requested, approved, submitted, verified and failed events` (tests: exactly one event per step, none for blocked gate, one verified event even when Advance repeats).
-5. `feat(notify): emit notification.recorded` (test that a deduped notification emits nothing).
-6. `test(events): domain events survive Redis outage and are consumed once per group` (integration over the real relay and stream).
-7. Phase gate: full suite, demo seed/play/reset, check that the five demonstration properties still hold.
-
-After that, the order I recommend: cleanup of dead packages; B2 simulator and correlation; B3 remaining detectors with the golden-case suite; B4 ownership, SLA pause and breach, search; B5 gaps; then B6 to B11 as in the matrix.
+`go test -p 1 -race -count=1 ./...` against local Postgres 16 and Redis: 726 tests passed, 2 failed, 12 packages skipped, 46 passed. The 2 failures were in `internal/authz`: tests written before the `manage_ingestion` capability (migration 0023) did not count its two grants or its MFA flag. Fixed in the test only; `internal/authz` then passed. The full suite was not re-run after that fix. Not run in this pass: demo replay against `sr_demo`.

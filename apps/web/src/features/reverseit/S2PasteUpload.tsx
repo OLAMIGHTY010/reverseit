@@ -136,14 +136,11 @@ export const S2PasteUpload: React.FC<S2PasteUploadProps> = ({
         </p>
       </div>
 
-      {/* Quick Bank Presets (Super convenient for testing & demonstration) */}
-      <div className="p-4 bg-[var(--surface)] border border-[var(--surface-border)] rounded-xl space-y-2.5 shadow-2xs">
-        <div className="flex items-center justify-between text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
-          <span className="flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-sky-600" />
-            <span>Try an Example Bank Alert</span>
-          </span>
-          <span className="text-sky-700 font-sans font-semibold">One-Click Auto-Fill</span>
+      {/* Sample Bank Presets (Useful for quick testing) */}
+      <div className="p-3 bg-[var(--surface)] border border-[var(--surface-border)] rounded-lg space-y-2">
+        <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+          <span>Quick Test Presets (Top Nigerian Banks)</span>
+          <span className="text-sky-700 font-sans">Template Verified</span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

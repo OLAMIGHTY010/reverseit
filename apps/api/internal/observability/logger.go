@@ -66,15 +66,35 @@ func parseLevel(level string) slog.Level {
 	}
 }
 
-// TraceMiddleware reads X-Trace-Id when it looks safe, otherwise generates one,
-// stores it in the request context and echoes it on the response.
+var w3cTraceparentRegex = regexp.MustCompile(`^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$`)
+
+func formatTraceparent(traceID string) string {
+	hexOnly := strings.ToLower(strings.ReplaceAll(traceID, "-", ""))
+	for len(hexOnly) < 32 {
+		hexOnly += "0"
+	}
+	if len(hexOnly) > 32 {
+		hexOnly = hexOnly[:32]
+	}
+	return "00-" + hexOnly + "-0000000000000001-01"
+}
+
+// TraceMiddleware reads traceparent or X-Trace-Id when safe, otherwise generates one,
+// stores it in the request context and echoes both headers on the response.
 func TraceMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := r.Header.Get(TraceHeader)
+		tp := r.Header.Get("traceparent")
+		if id == "" && tp != "" {
+			if m := w3cTraceparentRegex.FindStringSubmatch(tp); len(m) == 4 {
+				id = m[1]
+			}
+		}
 		if !validTraceID.MatchString(id) {
 			id = uuid.NewString()
 		}
 		w.Header().Set(TraceHeader, id)
+		w.Header().Set("traceparent", formatTraceparent(id))
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), traceIDKey{}, id)))
 	})
 }

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -38,6 +39,8 @@ const (
 	TplOpsReversalFailed   = "ops.reversal_failed.v1"
 	TplOpsHeld             = "ops.reversal_held.v1"
 	TplOpsApprovalExpired  = "ops.approval_expired.v1"
+	TplCustomerReceived    = "customer.report_received.v1"
+	TplOpsCustomerReport   = "ops.customer_report.v1"
 )
 
 // Money formats minor units for people, such as "NGN 18,500.00".
@@ -72,6 +75,23 @@ func CustomerDetected(minor int64, currency, txnRef string) Message {
 func CustomerVerified(minor int64, currency, txnRef string) Message {
 	return Message{Customer, StageVerified, TplCustomerVerified,
 		fmt.Sprintf("Your transaction %s of %s was reversed. We confirmed the reversal in your account records.", txnRef, Money(minor, currency))}
+}
+
+// CustomerReportReceived acknowledges a customer's report. It says only that the report
+// arrived and when the bank aims to respond. It makes no statement about money.
+func CustomerReportReceived(ref string, target *time.Time) Message {
+	when := "We will tell you when we have a target time."
+	if target != nil {
+		when = "Our target to respond is " + target.In(time.FixedZone("WAT", 3600)).Format("2 Jan 2006 15:04") + " WAT."
+	}
+	return Message{Customer, StageDetected, TplCustomerReceived,
+		fmt.Sprintf("We have received your report (ref %s). %s You can follow it in ReverseIt.", ref, when)}
+}
+
+// OpsCustomerReport tells operations a customer report arrived.
+func OpsCustomerReport(caseRef, code, dispute string) Message {
+	return Message{Operations, StageAlert, TplOpsCustomerReport,
+		fmt.Sprintf("Customer report %s opened as %s (%s).", caseRef, code, dispute)}
 }
 
 // OpsExceptionOpened tells operations a case exists.

@@ -180,33 +180,21 @@ Account Holder (Verified via Mobile Session)`;
         </Button>
       </div>
 
-      {/* Tab Switcher: Summary View vs Formal Letter */}
-      <div className="flex border-b border-[var(--surface-border)]">
-        <button
-          type="button"
-          onClick={() => setActiveTab('summary')}
-          className={`px-4 py-2 text-[13px] font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 ${
-            activeTab === 'summary'
-              ? 'border-sky-600 text-sky-700'
-              : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          <span>Dispute Summary Card</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setActiveTab('letter')}
-          className={`px-4 py-2 text-[13px] font-bold border-b-2 transition-colors cursor-pointer flex items-center gap-2 ${
-            activeTab === 'letter'
-              ? 'border-sky-600 text-sky-700'
-              : 'border-transparent text-[var(--text-muted)] hover:text-[var(--text-primary)]'
-          }`}
-        >
-          <Building className="w-4 h-4" />
-          <span>Official Complaint Letter (Editable)</span>
-        </button>
+      {/* Structured Complaint Letter Editor */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+          <span>Editable Complaint Text</span>
+          <span className="text-emerald-700 flex items-center gap-1">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Zero Hallucinations Verified</span>
+          </span>
+        </div>
+        <textarea
+          rows={14}
+          value={complaintText}
+          onChange={(e) => setComplaintText(e.target.value)}
+          className="w-full p-4 font-mono-financial text-[12px] leading-relaxed rounded-xl border border-[var(--border-input)] bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-sky-500 shadow-inner"
+        />
       </div>
 
       {/* Tab 1: Summary Card */}

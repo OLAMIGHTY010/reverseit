@@ -192,7 +192,7 @@ export const ReversalsView: React.FC = () => {
         <div>
           <h2 className="text-[16px] font-bold text-[var(--text-primary)] flex items-center gap-2">
             <ShieldAlert className="w-5 h-5 text-purple-700" />
-            <span>Reversal Queue, Detail and Approval</span>
+            <span>Reversal Queue, Audit Dossier & Dual-Control Approval</span>
           </h2>
           <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
             Strict dual-authorization protocol: No single operator can both propose and authorize a financial reversal. 8-point safety gate enforced.

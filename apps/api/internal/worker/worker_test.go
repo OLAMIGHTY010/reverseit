@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -11,14 +12,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/smartreversal/smartreversal/apps/api/internal/alerts"
+	"github.com/smartreversal/smartreversal/apps/api/internal/audit"
+	"github.com/smartreversal/smartreversal/apps/api/internal/configsvc"
 	"github.com/smartreversal/smartreversal/apps/api/internal/inbound"
+	"github.com/smartreversal/smartreversal/apps/api/internal/incidents"
 	"github.com/smartreversal/smartreversal/apps/api/internal/outbox"
 	"github.com/smartreversal/smartreversal/apps/api/internal/platform/db"
 	"github.com/smartreversal/smartreversal/apps/api/internal/platform/dbtest"
 	"github.com/smartreversal/smartreversal/apps/api/internal/platform/redisx"
+	"github.com/smartreversal/smartreversal/apps/api/internal/routing"
 	"github.com/smartreversal/smartreversal/apps/api/internal/server"
 	"github.com/smartreversal/smartreversal/apps/api/internal/stream"
 	"github.com/smartreversal/smartreversal/apps/api/internal/txn"
@@ -168,5 +175,63 @@ func TestWorkerIngestsEventsSourcesWriteToTheInboundStream(t *testing.T) {
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatalf("worker stopped with %v", err)
+	}
+}
+
+func TestTheOperationsSweepGroupsExceptionsRaisesOneAlertAndIsRepeatable(t *testing.T) {
+	d := deps(t)
+	ctx := context.Background()
+	tid := dbtest.Tenant(t, d.Pool)
+	app := &audit.Appender{}
+	cfg := &configsvc.Service{Audit: app}
+	al := &alerts.Service{Routing: &routing.Service{Audit: app}, Config: cfg, Audit: app}
+	d.Alerts = al
+	d.Incidents = &incidents.Service{Config: cfg, Alerts: al, Audit: app}
+
+	approve := func(key string, v int) {
+		raw, _ := json.Marshal(v)
+		err := d.Pool.WithTenant(ctx, tid, func(tx pgx.Tx) error {
+			ver, err := cfg.Propose(ctx, tx, tid, uuid.New(), configsvc.ProposeInput{Key: key, Value: raw, SourceReference: "SYNTHETIC DEMO POLICY - not approved for production",
+				EffectiveFrom: time.Now().Add(time.Second), VerifyStatus: "unverified", Reason: "synthetic value for a test"})
+			if err != nil {
+				return err
+			}
+			_, err = cfg.Decide(ctx, tx, tid, uuid.New(), key, ver.Version, true, "")
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	approve("incident.group_window_minutes", 30)
+	approve("incident.min_group_size", 4)
+	ing := &txn.Service{}
+	for i := 0; i < 6; i++ {
+		err := d.Pool.WithTenant(ctx, tid, func(tx pgx.Tx) error {
+			res, err := ing.Ingest(ctx, tx, tid, txn.Envelope{SourceSystem: "SWITCH_W", SourceEventRef: fmt.Sprintf("EV-OPS-%d", i), EventType: txn.EvDebitPosted, SourceTS: time.Now().Add(-time.Minute),
+				Txn: txn.Core{InstructionRef: fmt.Sprintf("INS-OPS%d", i), Channel: "MOBILE", Rail: "NIP", AmountMinor: 1000, Currency: "NGN", DebitAccountToken: syntheticAccount}})
+			if err != nil {
+				return err
+			}
+			_, err = tx.Exec(ctx, `INSERT INTO cases (tenant_id, case_ref, classification, status, priority, source, txn_id, opened_at, root_cause)
+				VALUES ($1,$2,'UNK001','DETECTED','HIGH','bot',$3,now() - interval '1 minute','switch_response_failure')`, tid, fmt.Sprintf("CASE-OPS-%d", i), res.TxnID)
+			return err
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	time.Sleep(1100 * time.Millisecond) // the approved values take effect one second after they were proposed
+	count := func(q string) (n int) {
+		_ = d.Pool.WithTenant(ctx, tid, func(tx pgx.Tx) error { return tx.QueryRow(ctx, q).Scan(&n) })
+		return
+	}
+	opsAll(ctx, d)
+	opsAll(ctx, d)
+	if n := count(`SELECT count(*) FROM incidents`); n != 1 {
+		t.Fatalf("%d incidents", n)
+	}
+	if open, suppressed := count(`SELECT count(*) FROM alerts WHERE status = 'open'`), count(`SELECT count(*) FROM alerts WHERE status = 'suppressed'`); open != 1 || suppressed != 6 {
+		t.Fatalf("open %d suppressed %d: one incident should page once and its cases should be suppressed", open, suppressed)
 	}
 }
