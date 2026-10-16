@@ -46,7 +46,7 @@ export const ModelDriftAndShadowView: React.FC = () => {
           }`}
         >
           <Brain className="w-4 h-4" />
-          <span>Screen 17: ML Model Performance & Concept Drift</span>
+          <span>ML Model Performance & Concept Drift</span>
         </button>
 
         <button
@@ -58,7 +58,7 @@ export const ModelDriftAndShadowView: React.FC = () => {
           }`}
         >
           <Layers className="w-4 h-4" />
-          <span>Screen 18: Shadow Mode Model Comparison Matrix</span>
+          <span>Shadow Mode Model Comparison Matrix</span>
         </button>
       </div>
 
