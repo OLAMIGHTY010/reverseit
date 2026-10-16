@@ -4,6 +4,9 @@ import {
   ArrowLeft,
   EyeOff,
   Sparkles,
+  CheckCircle,
+  FileText,
+  X,
 } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { SAMPLE_NIGERIAN_ALERTS } from './reverseitData';
@@ -25,6 +28,7 @@ export const S2PasteUpload: React.FC<S2PasteUploadProps> = ({
   const [consentChecked, setConsentChecked] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedPresetIndex, setSelectedPresetIndex] = useState<number | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
 
   // Quick preset loader
   const handleSelectPreset = (index: number) => {
@@ -40,10 +44,16 @@ export const S2PasteUpload: React.FC<S2PasteUploadProps> = ({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Auto-load preset 0 as realistic extracted text
+      setUploadedFileName(file.name);
       setAlertText(SAMPLE_NIGERIAN_ALERTS[0].text);
       setConsentChecked(true);
     }
+  };
+
+  const handleClear = () => {
+    setAlertText('');
+    setSelectedPresetIndex(null);
+    setUploadedFileName(null);
   };
 
   const handleParseAndContinue = async () => {
@@ -97,92 +107,145 @@ export const S2PasteUpload: React.FC<S2PasteUploadProps> = ({
   };
 
   return (
-    <div className="max-w-2xl mx-auto py-4 px-4 space-y-6 animate-in fade-in duration-200">
+    <div className="max-w-2xl mx-auto py-2 px-2 sm:px-4 space-y-6 animate-in fade-in duration-200">
       {/* Back button */}
       <button
         type="button"
         onClick={onBack}
-        className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium cursor-pointer"
+        className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] font-medium transition-colors cursor-pointer"
       >
         <ArrowLeft className="w-4 h-4" />
         <span>Back to options</span>
       </button>
 
-      {/* Screen Title */}
-      <div>
-        <h2 className="text-[20px] font-bold text-[var(--text-primary)]">
-          {mode === 'PASTE_TEXT' ? 'Step 1: Paste Your Debit Alert' : 'Step 1: Upload Alert Screenshot'}
-        </h2>
-        <p className="text-[13px] text-[var(--text-muted)] mt-1">
+      {/* Screen Title & Subtitle */}
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-sky-100 text-sky-800">
+            Step 1 of 5
+          </span>
+          <span className="text-[12px] text-[var(--text-muted)]">Alert Intake & Parsing</span>
+        </div>
+        <h1 className="text-[22px] font-bold text-[var(--text-primary)]">
+          {mode === 'PASTE_TEXT' ? 'Paste Your Debit Alert' : 'Upload Alert Screenshot or Receipt'}
+        </h1>
+        <p className="text-[13px] text-[var(--text-secondary)]">
           {mode === 'PASTE_TEXT'
-            ? 'Paste the full SMS or email message sent by your bank.'
+            ? 'Paste the full SMS or email notification received from your bank. We will automatically detect key transaction identifiers.'
             : 'Select or drag a screenshot of the alert or mobile banking transaction receipt.'}
         </p>
       </div>
 
-      {/* Sample Bank Presets (Useful for quick testing) */}
-      <div className="p-3 bg-[var(--surface)] border border-[var(--surface-border)] rounded-lg space-y-2">
-        <div className="flex items-center justify-between text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
-          <span>Quick Test Presets (Top Nigerian Banks)</span>
-          <span className="text-sky-700 font-sans">Verified Format Parser</span>
+      {/* Quick Bank Presets (Super convenient for testing & demonstration) */}
+      <div className="p-4 bg-[var(--surface)] border border-[var(--surface-border)] rounded-xl space-y-2.5 shadow-2xs">
+        <div className="flex items-center justify-between text-[11px] font-bold text-[var(--text-muted)] uppercase tracking-wider">
+          <span className="flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-sky-600" />
+            <span>Try an Example Bank Alert</span>
+          </span>
+          <span className="text-sky-700 font-sans font-semibold">One-Click Auto-Fill</span>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {SAMPLE_NIGERIAN_ALERTS.map((sample, i) => (
-            <button
-              key={sample.bankName}
-              type="button"
-              onClick={() => handleSelectPreset(i)}
-              className={`px-2.5 py-1 text-[12px] font-medium rounded-md border transition-colors cursor-pointer ${
-                selectedPresetIndex === i
-                  ? 'bg-sky-100 text-sky-900 border-sky-400 font-semibold shadow-xs'
-                  : 'bg-[var(--canvas-subdued)] text-[var(--text-secondary)] border-[var(--surface-border)] hover:bg-[var(--surface)]'
-              }`}
-            >
-              {sample.label}
-            </button>
-          ))}
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {SAMPLE_NIGERIAN_ALERTS.map((sample, i) => {
+            const isSelected = selectedPresetIndex === i;
+            return (
+              <button
+                key={sample.bankName}
+                type="button"
+                onClick={() => handleSelectPreset(i)}
+                className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer flex flex-col justify-between gap-1 ${
+                  isSelected
+                    ? 'bg-sky-50 text-sky-950 border-sky-500 shadow-xs ring-1 ring-sky-500'
+                    : 'bg-[var(--canvas-subdued)] text-[var(--text-secondary)] border-[var(--surface-border)] hover:bg-[var(--surface)] hover:border-slate-300'
+                }`}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="font-bold text-[11px] text-[var(--text-primary)] truncate">
+                    {sample.bankName}
+                  </span>
+                  {isSelected && <CheckCircle className="w-3.5 h-3.5 text-sky-600 shrink-0" />}
+                </div>
+                <span className="text-[10px] text-[var(--text-muted)] truncate">
+                  {sample.label.split('(')[1]?.replace(')', '') || sample.label}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
       {/* Input Area */}
       {mode === 'PASTE_TEXT' ? (
         <div className="space-y-2">
-          <label htmlFor="alert-text-input" className="block text-[13px] font-semibold text-[var(--text-primary)]">
-            Alert Message Content
-          </label>
+          <div className="flex items-center justify-between">
+            <label
+              htmlFor="alert-text-input"
+              className="text-[13px] font-bold text-[var(--text-primary)] flex items-center gap-1.5"
+            >
+              <FileText className="w-4 h-4 text-sky-600" />
+              <span>Debit Alert Message</span>
+            </label>
+            {alertText && (
+              <button
+                type="button"
+                onClick={handleClear}
+                className="text-[11px] text-rose-600 hover:text-rose-700 font-medium flex items-center gap-1 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Clear text</span>
+              </button>
+            )}
+          </div>
+
           <textarea
             id="alert-text-input"
             rows={5}
             value={alertText}
-            onChange={(e) => setAlertText(e.target.value)}
-            placeholder="Paste your debit alert here (e.g. 'Debit Alert: Acct 0234****891 Amt: NGN 25,000.00...')"
-            className="w-full p-3 text-[13px] font-mono-financial rounded-md border border-[var(--border-input)] bg-[var(--surface)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-sky-500"
+            onChange={(e) => {
+              setAlertText(e.target.value);
+              setSelectedPresetIndex(null);
+            }}
+            placeholder="Paste your debit alert here (e.g. 'Debit Alert: Acct 0234****891 Amt: NGN 25,000.00 Desc: TRF/NIP/NIBSS... Date: 14-Oct-2026 09:12:44...')"
+            className="w-full p-3.5 text-[13px] font-mono-financial rounded-xl border border-[var(--surface-border)] bg-[var(--surface)] text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-sky-500 shadow-2xs leading-relaxed"
           />
+
+          {alertText && (
+            <div className="p-2.5 rounded-lg bg-sky-50 border border-sky-200 text-sky-900 text-[12px] flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <CheckCircle className="w-4 h-4 text-sky-600" />
+                <span>Alert text loaded ({alertText.length} characters)</span>
+              </span>
+              <span className="text-[11px] font-semibold text-sky-700">Ready to analyze</span>
+            </div>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="border-2 border-dashed border-[var(--surface-border)] rounded-xl p-6 text-center hover:border-sky-500 transition-colors bg-[var(--surface)]">
-            <UploadCloud className="w-10 h-10 mx-auto text-slate-400 mb-2" />
-            <p className="text-[14px] font-semibold text-[var(--text-primary)]">
-              Click to select screenshot or drag & drop
-            </p>
-            <p className="text-[12px] text-[var(--text-muted)] mt-1">PNG, JPG, or WEBP up to 5MB</p>
+          <div className="border-2 border-dashed border-[var(--surface-border)] rounded-2xl p-6 sm:p-8 text-center hover:border-sky-500 transition-colors bg-[var(--surface)] space-y-3">
+            <UploadCloud className="w-12 h-12 mx-auto text-sky-600" />
+            <div>
+              <p className="text-[14px] font-bold text-[var(--text-primary)]">
+                {uploadedFileName ? `Selected: ${uploadedFileName}` : 'Select screenshot or drag & drop'}
+              </p>
+              <p className="text-[12px] text-[var(--text-muted)] mt-1">PNG, JPG, or PDF up to 5MB</p>
+            </div>
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,.pdf"
               onChange={handleFileChange}
-              className="mt-3 block mx-auto text-[12px] file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-[12px] file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 cursor-pointer"
+              className="mt-2 block mx-auto text-[12px] file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-[12px] file:font-bold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100 cursor-pointer shadow-2xs"
             />
           </div>
 
           {/* Privacy & Redaction Tip */}
-          <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-lg flex items-start gap-2.5 text-[12px] text-purple-900">
+          <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-xl flex items-start gap-3 text-[12px] text-purple-950">
             <EyeOff className="w-4 h-4 text-purple-700 shrink-0 mt-0.5" />
             <div>
-              <strong className="font-semibold">Privacy Protection: </strong>
+              <strong className="font-bold">Automated Privacy Guard: </strong>
               <span>
-                Hide your account balance if you can. Our local OCR automatically masks balances, 
-                full account numbers, and customer names before processing.
+                Our local OCR automatically masks balances, card numbers, and sensitive identifiers. 
+                Your personal financial data never leaves your session unprotected.
               </span>
             </div>
           </div>
@@ -190,18 +253,17 @@ export const S2PasteUpload: React.FC<S2PasteUploadProps> = ({
       )}
 
       {/* Mandatory Consent Checkbox */}
-      <div className="p-4 bg-[var(--canvas-subdued)] border border-[var(--surface-border)] rounded-lg space-y-2">
+      <div className="p-4 bg-[var(--surface)] border border-[var(--surface-border)] rounded-xl space-y-2 shadow-2xs">
         <label className="flex items-start gap-3 cursor-pointer select-none">
           <input
             type="checkbox"
             checked={consentChecked}
             onChange={(e) => setConsentChecked(e.target.checked)}
-            className="mt-0.5 w-4 h-4 rounded text-sky-600 focus:ring-sky-500 border-slate-300 cursor-pointer"
+            className="mt-0.5 w-4 h-4 rounded text-sky-600 focus:ring-sky-500 border-slate-300 cursor-pointer shrink-0"
           />
-          <span className="text-[12px] text-[var(--text-primary)] leading-normal">
-            I consent to automated extraction and masked verification of this transaction alert. 
-            I understand that SMARTREVERSAL operates under strict local PII redaction and never executes 
-            monetary movements autonomously.
+          <span className="text-[12px] text-[var(--text-secondary)] leading-relaxed">
+            I authorize Smart Reversal to extract and verify this transaction alert against bank switch records. 
+            I understand that all account numbers are locally masked and protected under Nigerian Data Protection Regulations (NDPR).
           </span>
         </label>
       </div>
@@ -219,7 +281,7 @@ export const S2PasteUpload: React.FC<S2PasteUploadProps> = ({
           onClick={handleParseAndContinue}
           rightIcon={<Sparkles className="w-4 h-4" />}
         >
-          Parse Alert & Continue
+          Verify Extracted Details &rarr;
         </Button>
       </div>
     </div>
