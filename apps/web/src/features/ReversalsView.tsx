@@ -118,7 +118,7 @@ export const ReversalsView: React.FC = () => {
         <div>
           <h2 className="text-[16px] font-bold text-[var(--text-primary)] flex items-center gap-2">
             <ShieldAlert className="w-5 h-5 text-purple-700" />
-            <span>F4: Reversal Queue, Detail and Approval (Screens 7, 8, 11)</span>
+            <span>Reversal Queue, Detail and Approval</span>
           </h2>
           <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
             Strict dual-authorization protocol: No single operator can both propose and authorize a financial reversal. 8-point safety gate enforced.
@@ -256,7 +256,7 @@ export const ReversalsView: React.FC = () => {
                         onClick={() => handleOpenDetail(rev)}
                         leftIcon={<FileText className="w-3.5 h-3.5" />}
                       >
-                        Screen 8: View Dossier
+                        View Dossier
                       </Button>
 
                       {isPending ? (
@@ -266,7 +266,7 @@ export const ReversalsView: React.FC = () => {
                           onClick={() => handleOpenReview(rev)}
                           leftIcon={<ShieldCheck className="w-3.5 h-3.5" />}
                         >
-                          {isChecker ? 'Screen 11: Authorize' : 'Review Proposal'}
+                          {isChecker ? 'Authorize Reversal' : 'Review Proposal'}
                         </Button>
                       ) : (
                         <span className="px-2.5 py-1 text-[11px] font-semibold rounded bg-emerald-50 text-emerald-900 border border-emerald-300 font-mono-financial">
