@@ -139,7 +139,7 @@ test.describe('First-Contact Agent Intake & Reversal Governance (F4 Screens 7, 8
     await page.click('button:has-text("Reversals")');
 
     // Screen 7: Proposals Queue & Controls Bar
-    await expect(page.locator('text=F4: Reversal Queue, Detail and Approval (Screens 7, 8, 11)')).toBeVisible();
+    await expect(page.locator('text=Reversal Queue, Detail and Approval')).toBeVisible();
     await expect(page.locator('text=TXN-20261015-NIP-9901')).toBeVisible();
 
     // Click proposal to open Screen 8 Reversal Proposal Audit Dossier
