@@ -41,7 +41,7 @@ export const RiskHeatmapTab: React.FC<RiskHeatmapTabProps> = ({ hotspots }) => {
               Merchant Risk & Anomaly Hotspot Heatmap
             </h3>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-rose-100 text-rose-800 font-mono-financial">
-              Screen 16 • Geographic Telemetry
+              Geographic Telemetry
             </span>
           </div>
           <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
