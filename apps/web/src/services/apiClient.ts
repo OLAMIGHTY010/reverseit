@@ -9,6 +9,9 @@ import type {
   Severity,
   Channel,
   Role,
+  ExceptionType,
+  ClassificationCode,
+  ExceptionSource,
   ExceptionTeam,
   ExceptionNote,
   RootCause,
@@ -48,8 +51,19 @@ export interface ServiceTierStatus {
 }
 
 // In-memory reactive state for simulator
+const LIVE_CUSTOMER_EXCEPTIONS_KEY = 'smartreversal_live_customer_exceptions';
+
+function getStoredCustomerExceptions(): FinancialException[] {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(LIVE_CUSTOMER_EXCEPTIONS_KEY) : null;
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
 let transactions = [...INITIAL_TRANSACTIONS];
-let exceptions = [...INITIAL_EXCEPTIONS];
+let exceptions = [...getStoredCustomerExceptions(), ...INITIAL_EXCEPTIONS];
 let investigations = [...INITIAL_INVESTIGATIONS];
 let reversals = [...INITIAL_REVERSALS];
 let auditTrail = [...INITIAL_AUDIT_TRAIL];
@@ -314,19 +328,20 @@ export const apiClient = {
             transactionId: (item.txn_id as string) || `tx-${item.id}`,
             reference: (item.case_ref as string) || `REF-${item.id}`,
             type: ((item.classification as string) || 'DEBIT_WITHOUT_CREDIT') as ExceptionType,
-            classificationCode: (item.classification as string) || 'DWC001',
-            source: (item.source as string) || 'SWITCH',
+            classificationCode: ((item.classification as string) || 'CUS001') as ClassificationCode,
+            source: ((item.source as string) === 'CUSTOMER' ? 'CUSTOMER' : 'BOT') as ExceptionSource,
             rootCause: ((item.root_cause as string) || 'SWITCH_TIMEOUT') as RootCause,
             severity: (item.priority === 'CRITICAL' ? 'CRITICAL' : item.priority === 'HIGH' ? 'HIGH' : 'MEDIUM') as Severity,
             amount: item.exposure_minor ? (Number(item.exposure_minor) / 100).toFixed(2) : '10000.00',
             currency: (item.currency as string) || 'NGN',
             exposure: item.exposure_minor ? (Number(item.exposure_minor) / 100).toFixed(2) : '10000.00',
-            exposureType: 'FINANCIAL_EXPOSURE',
+            exposureType: 'CUSTOMER_DISPUTE',
             channel: 'NIP' as Channel,
             status: (item.status === 'resolved' ? 'resolved' : 'detected') as FinancialStatus,
             lane: 'MANUAL_INVESTIGATION',
             description: (item.headline as string) || 'Exception detected by automated rules',
             detectedAt: (item.opened_at as string) || new Date().toISOString(),
+            debitTimestamp: (item.debit_timestamp as string) || (item.opened_at as string) || new Date().toISOString(),
             internalSlaTarget: (item.sla_due_at as string) || new Date(Date.now() + 4 * 3600000).toISOString(),
             regulatoryDeadline: (item.sla_due_at as string) || new Date(Date.now() + 24 * 3600000).toISOString(),
             slaStatus: 'ON_TRACK',
@@ -354,6 +369,16 @@ export const apiClient = {
       // fallback
     }
 
+    // Always merge any customer-posted disputes at the front of the queue
+    const liveCustomerItems = getStoredCustomerExceptions();
+    const existingIds = new Set(exceptions.map((e) => e.id));
+    for (const item of liveCustomerItems) {
+      if (!existingIds.has(item.id)) {
+        exceptions.unshift(item);
+        existingIds.add(item.id);
+      }
+    }
+
     let result = [...exceptions];
     if (params?.severity) {
       result = result.filter((e) => e.severity === params.severity);
@@ -373,7 +398,71 @@ export const apiClient = {
     return result;
   },
 
-  // Customer Complaint Intake (Live POST /v1/complaints)
+  // Record customer dispute directly to operational queues (live sync)
+  recordCustomerDisputeException(newExc: FinancialException) {
+    const stored = getStoredCustomerExceptions();
+    const filtered = stored.filter((e) => e.id !== newExc.id && e.reference !== newExc.reference);
+    const updated = [newExc, ...filtered];
+    try {
+      localStorage.setItem(LIVE_CUSTOMER_EXCEPTIONS_KEY, JSON.stringify(updated));
+    } catch {
+      // silent
+    }
+
+    // Prepend to in-memory exceptions
+    if (!exceptions.some((e) => e.id === newExc.id || e.reference === newExc.reference)) {
+      exceptions = [newExc, ...exceptions];
+    }
+
+    // Also create matching investigation case so analyst can inspect it in Investigations tab
+    const newInv: InvestigationCase = {
+      id: `inv-${newExc.id}`,
+      caseNumber: `CASE-${newExc.reference}`,
+      exceptionId: newExc.id,
+      reference: newExc.reference,
+      status: 'detected',
+      priority: newExc.severity,
+      assignedAnalyst: 'Unassigned',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      exception: newExc,
+      evidence: [],
+      timeline: [
+        {
+          id: `evt-${Date.now()}`,
+          source: 'CUSTOMER',
+          sourceName: 'Smart Reversal Customer Portal',
+          sourceTimestamp: new Date().toISOString(),
+          receivedTimestamp: new Date().toISOString(),
+          clockSkewMs: 0,
+          isLateArriving: false,
+          title: 'Customer Dispute Registered',
+          description: `Dispute filed by customer for reference ${newExc.reference} (${newExc.currency} ${newExc.amount})`,
+          payload: { reference: newExc.reference, amount: newExc.amount },
+          severity: 'INFO',
+        },
+      ],
+      externalDependencies: [],
+      confirmedRootCause: undefined,
+      aiSuggestedRootCause: newExc.rootCause,
+      isRootCauseConfirmed: false,
+      ledgerPostings: [],
+      relatedTransactions: [],
+      relatedCases: [],
+      killSwitchActive: false,
+      proposedAction: 'Initiate counterparty query or reversal approval under dual control',
+      aiSuggestedRemedy: newExc.modelExplanation,
+      modelConfidence: newExc.modelConfidence,
+    };
+    investigations = [newInv, ...investigations];
+
+    // Emit live custom event for reactive real-time UI updates
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('smartreversal:new_exception', { detail: newExc }));
+    }
+  },
+
+  // Customer Complaint Intake (Live POST /v1/complaints with API format)
   async submitComplaint(complaint: {
     instruction_ref?: string;
     account_number?: string;
@@ -381,14 +470,20 @@ export const apiClient = {
     currency?: string;
     channel?: string;
     complaint?: string;
+    text?: string;
     contact?: string;
   }) {
     const origin = typeof window !== 'undefined' ? '' : 'http://localhost:5173';
     try {
+      const payload = {
+        instruction_ref: complaint.instruction_ref || '',
+        text: complaint.text || complaint.complaint || 'Customer transaction dispute registered via customer portal.',
+        contact_ref: complaint.contact || 'CUSTOMER_SESSION',
+      };
       const res = await fetch(`${origin}/v1/complaints`, {
         method: 'POST',
         headers: getAuthHeaders(),
-        body: JSON.stringify(complaint),
+        body: JSON.stringify(payload),
       });
       if (res.ok) {
         return await res.json();
@@ -928,6 +1023,78 @@ export const apiClient = {
     return updated;
   },
 
+  // POST /reversals/batch-authorize (Supervisor Checker Step)
+  async batchAuthorizeReversals(payload: {
+    reversalIds: string[];
+    authorizedBy: string;
+    decision: 'APPROVE' | 'REJECT';
+    notes?: string;
+  }): Promise<ReversalProposal[]> {
+    const updatedList: ReversalProposal[] = [];
+
+    for (const reversalId of payload.reversalIds) {
+      const prop = reversals.find((r) => r.id === reversalId);
+      if (!prop) continue;
+
+      const updatedStatus: FinancialStatus = payload.decision === 'APPROVE' ? 'resolved' : 'failed';
+
+      const updated: ReversalProposal = {
+        ...prop,
+        status: updatedStatus,
+        authorizedBy: payload.authorizedBy,
+        authorizedAt: new Date().toISOString(),
+        rejectionReason: payload.decision === 'REJECT' ? payload.notes : undefined,
+      };
+
+      reversals = reversals.map((r) => (r.id === prop.id ? updated : r));
+
+      // Update linked transaction
+      transactions = transactions.map((t) =>
+        t.id === prop.transactionId ? { ...t, status: updatedStatus, hasDiscrepancy: false } : t
+      );
+
+      // Update linked exception if exists
+      exceptions = exceptions.map((e) =>
+        e.transactionId === prop.transactionId || e.reference === prop.reference
+          ? { ...e, status: updatedStatus }
+          : e
+      );
+
+      // Immutable Audit Trail
+      auditTrail = [
+        {
+          id: `aud-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          timestamp: new Date().toISOString(),
+          actorId: payload.authorizedBy,
+          actorRole: 'SUPERVISOR_CHECKER',
+          action:
+            payload.decision === 'APPROVE'
+              ? 'REVERSAL_AUTHORIZED_AND_DISPATCHED'
+              : 'REVERSAL_REJECTED',
+          entityType: 'REVERSAL',
+          entityId: prop.id,
+          prevHash: auditTrail[0]?.entryHash || '0000',
+          entryHash: Math.random().toString(36).substring(2, 18),
+          details: {
+            batchOperation: true,
+            totalBatchSize: payload.reversalIds.length,
+            reference: prop.reference,
+            amount: prop.reversalAmount,
+            decision: payload.decision,
+            idempotencyKey: prop.idempotencyKey,
+            notes: payload.notes,
+          },
+          ipAddress: '127.0.0.1',
+        },
+        ...auditTrail,
+      ];
+
+      updatedList.push(updated);
+    }
+
+    return updatedList;
+  },
+
   // GET /audit-logs
   async getAuditLogs(): Promise<AuditEvent[]> {
     return [...auditTrail];
@@ -1050,6 +1217,37 @@ export const apiClient = {
     // 1. REFERENCE SEARCH
     if (query.queryType === 'REFERENCE' && query.reference) {
       const cleanRef = query.reference.trim().toUpperCase();
+
+      // Check for live customer-reported dispute or live exception match
+      const liveMatch = exceptions.find(
+        (e) =>
+          e.reference.toUpperCase().includes(cleanRef) ||
+          e.id.toUpperCase().includes(cleanRef) ||
+          (e.rrn && e.rrn.toUpperCase().includes(cleanRef))
+      );
+      if (
+        liveMatch &&
+        !cleanRef.includes('9901') &&
+        !cleanRef.includes('9902') &&
+        !cleanRef.includes('7711') &&
+        !cleanRef.includes('REVERSED')
+      ) {
+        const inv = investigations.find((i) => i.exceptionId === liveMatch.id) || investigations[0];
+        return {
+          state: 'MATCH_EXCEPTION',
+          query,
+          customerSafeStatusText: 'Active transaction dispute filed by customer. Authoritative switch re-query scheduled.',
+          expectedNextStep: 'Awaiting Switch TSQ confirmation before automated 8-check reversal gate.',
+          timeEstimate: 'Target resolution within regulatory SLA clock.',
+          approvedWording: `We have received your dispute for reference ${liveMatch.reference} (${liveMatch.currency} ${liveMatch.amount}). An automated investigation is active under case ${liveMatch.reference}. A technical query has been scheduled with the switch to verify the settlement status.`,
+          canQuoteRefund: false,
+          exception: liveMatch,
+          investigationCase: inv,
+          repeatContactCount: liveMatch.repeatContactCount || 1,
+          isThresholdReached: false,
+          isSourceStale: isSimulatedStale,
+        };
+      }
 
       // Case A: Matches active exception TXN-20261015-NIP-9901 or EXC-001 or RRN 9901847120 or STAN 009901
       if (
