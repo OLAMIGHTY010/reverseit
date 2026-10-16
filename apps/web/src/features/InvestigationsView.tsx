@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldAlert,
   Send,
@@ -42,6 +42,30 @@ export const InvestigationsView: React.FC = () => {
   const [selectedCaseId, setSelectedCaseId] = useState<string>(
     INITIAL_INVESTIGATIONS[0]?.id || ''
   );
+
+  useEffect(() => {
+    let isMounted = true;
+    apiClient.getInvestigations().then((invs) => {
+      if (isMounted && invs.length > 0) {
+        setCases(invs);
+        if (!selectedCaseId && invs[0]) {
+          setSelectedCaseId(invs[0].id);
+        }
+      }
+    }).catch(() => {});
+
+    const handleLiveDispute = () => {
+      apiClient.getInvestigations().then((invs) => {
+        if (isMounted) setCases(invs);
+      }).catch(() => {});
+    };
+
+    window.addEventListener('smartreversal:new_exception', handleLiveDispute);
+    return () => {
+      isMounted = false;
+      window.removeEventListener('smartreversal:new_exception', handleLiveDispute);
+    };
+  }, []);
   const [activeCentreTab, setActiveCentreTab] = useState<CentreTab>(() => {
     const firstCase = INITIAL_INVESTIGATIONS[0];
     return firstCase?.duplicateComparison && firstCase.exception.classificationCode === 'DUP001'
