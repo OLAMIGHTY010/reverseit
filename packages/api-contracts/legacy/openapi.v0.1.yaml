@@ -1,0 +1,414 @@
+openapi: 3.1.0
+info:
+  title: SMARTREVERSAL Enterprise Financial Operations API
+  description: >
+    API contracts for transaction investigation, multi-source reconciliation,
+    exception management, and controlled dual-authorization financial reversals.
+  version: 0.1.0
+  contact:
+    name: SMARTREVERSAL Platform Engineering
+    email: engineering@smartreversal.internal
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local Development API Gateway
+
+paths:
+  /health:
+    get:
+      summary: System Health and Readiness Check
+      description: Returns service liveness, database connectivity, and subsystem status.
+      responses:
+        '200':
+          description: Service is healthy and operational.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /auth/login:
+    post:
+      summary: Authenticate Operator
+      description: Authenticates financial analysts, approvers, or compliance officers.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authentication successful.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+        '401':
+          description: Invalid credentials.
+
+  /transactions:
+    get:
+      summary: Query Transactions
+      description: Search ingested transactions with comprehensive filtering across channels.
+      parameters:
+        - name: reference
+          in: query
+          schema:
+            type: string
+        - name: channel
+          in: query
+          schema:
+            type: string
+            enum: [NIP, POS, CARD, WEBHOOK, DIRECT_DEBIT]
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [SUCCESS, PENDING, FAILED, UNCERTAIN, REVERSED]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: List of transactions matching query.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+
+  /reconciliation/runs:
+    post:
+      summary: Trigger Reconciliation Run
+      description: Initiates a multi-way reconciliation cycle between internal ledgers and processor files.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReconciliationRunRequest'
+      responses:
+        '202':
+          description: Reconciliation run accepted and processing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReconciliationRunResponse'
+
+  /exceptions:
+    get:
+      summary: List Detected Exceptions
+      description: Retrieve unmatched records, duplicate debits, and status discrepancies.
+      parameters:
+        - name: severity
+          in: query
+          schema:
+            type: string
+            enum: [LOW, MEDIUM, HIGH, CRITICAL]
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [DEBIT_WITHOUT_CREDIT, DUPLICATE_DEBIT, STATUS_MISMATCH, SUSPENSE_BALANCE, TIMEOUT_EXCEPTION]
+      responses:
+        '200':
+          description: List of active exceptions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FinancialException'
+
+  /investigations:
+    post:
+      summary: Open Investigation Case
+      description: Creates an investigation case linked to one or more financial exceptions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvestigationCreateRequest'
+      responses:
+        '201':
+          description: Investigation case created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvestigationCase'
+
+  /reversals/propose:
+    post:
+      summary: Propose Reversal (Maker Step)
+      description: Analyst drafts a reversal resolution requiring checker authorization.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReversalProposalRequest'
+      responses:
+        '201':
+          description: Reversal proposed and pending approval.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReversalProposal'
+
+  /reversals/{id}/authorize:
+    post:
+      summary: Authorize Reversal (Checker Step)
+      description: Authorized supervisor approves or rejects proposed reversal action.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReversalAuthorizationRequest'
+      responses:
+        '200':
+          description: Reversal authorized and dispatched.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReversalExecutionResult'
+
+  /audit-logs:
+    get:
+      summary: Query Immutable Audit Trail
+      description: Read audit events for investigations, reviews, and transaction status shifts.
+      parameters:
+        - name: entityId
+          in: query
+          schema:
+            type: string
+        - name: actorId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Audit log events.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AuditEvent'
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          example: "operational"
+        version:
+          type: string
+          example: "0.1.0"
+        database:
+          type: string
+          example: "connected"
+        redis:
+          type: string
+          example: "connected"
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AuthTokenResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        role:
+          type: string
+          enum: [ANALYST_MAKER, SUPERVISOR_CHECKER, AUDITOR, ADMIN]
+        expiresIn:
+          type: integer
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        reference:
+          type: string
+        amount:
+          type: string
+          example: "150000.00"
+        currency:
+          type: string
+          example: "NGN"
+        channel:
+          type: string
+        status:
+          type: string
+        senderAccount:
+          type: string
+        beneficiaryAccount:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ReconciliationRunRequest:
+      type: object
+      required:
+        - cycleDate
+        - channel
+      properties:
+        cycleDate:
+          type: string
+          format: date
+        channel:
+          type: string
+
+    ReconciliationRunResponse:
+      type: object
+      properties:
+        runId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          example: "QUEUED"
+
+    FinancialException:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        transactionReference:
+          type: string
+        type:
+          type: string
+        severity:
+          type: string
+        discrepancyAmount:
+          type: string
+        status:
+          type: string
+
+    InvestigationCreateRequest:
+      type: object
+      required:
+        - exceptionId
+        - reason
+      properties:
+        exceptionId:
+          type: string
+          format: uuid
+        reason:
+          type: string
+
+    InvestigationCase:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        exceptionId:
+          type: string
+          format: uuid
+        assignedTo:
+          type: string
+        status:
+          type: string
+
+    ReversalProposalRequest:
+      type: object
+      required:
+        - transactionId
+        - amount
+        - rationale
+        - idempotencyKey
+      properties:
+        transactionId:
+          type: string
+          format: uuid
+        amount:
+          type: string
+        rationale:
+          type: string
+        idempotencyKey:
+          type: string
+
+    ReversalProposal:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          example: "PENDING_CHECKER_APPROVAL"
+        makerId:
+          type: string
+
+    ReversalAuthorizationRequest:
+      type: object
+      required:
+        - decision
+        - notes
+      properties:
+        decision:
+          type: string
+          enum: [APPROVE, REJECT]
+        notes:
+          type: string
+
+    ReversalExecutionResult:
+      type: object
+      properties:
+        reversalId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          example: "DISPATCHED"
+        gatewayReference:
+          type: string
+
+    AuditEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        actorId:
+          type: string
+        action:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: string
+        details:
+          type: object

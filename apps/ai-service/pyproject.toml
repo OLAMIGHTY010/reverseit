@@ -1,0 +1,26 @@
+[project]
+name = "smartreversal-ai-service"
+version = "0.1.0"
+description = "AI and Machine Learning investigation intelligence service for SMARTREVERSAL"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.8.0",
+    "pydantic-settings>=2.4.0",
+    "scikit-learn>=1.5.0",
+    "numpy>=2.0.0",
+    "pandas>=2.2.0",
+    "httpx>=0.27.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+addopts = "-p no:dash -p no:anyio"
+testpaths = ["tests"]
+
+

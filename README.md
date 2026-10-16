@@ -1,175 +1,226 @@
-# ReverseIt
+<p align="center">
+  <img src="docs/assets/logo.png" alt="SMARTREVERSAL Logo" width="130" height="130" />
+</p>
 
-Helps customers dispute failed bank transactions: paste a debit alert, get the reversal deadline, and generate a ready-to-send complaint.
+<h1 align="center">SMARTREVERSAL</h1>
+
+<p align="center">
+  <strong>AI-Powered Transaction Investigation, Reconciliation, Exception Management, and Controlled Financial Transaction Resolution Platform</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Status-Active_Development-brightgreen?style=flat-square" alt="Status" />
+  <img src="https://img.shields.io/badge/AI_Tests-58%2F58_Passing-blue?style=flat-square" alt="AI Tests" />
+  <img src="https://img.shields.io/badge/Maker--Checker-Enforced-indigo?style=flat-square" alt="Maker Checker" />
+  <img src="https://img.shields.io/badge/License-Proprietary-red?style=flat-square" alt="License" />
+</p>
+
+SMARTREVERSAL is an enterprise financial operations platform built for banks, fintech institutions, payment service providers (PSPs), and payment switches to automate the detection, investigation, reconciliation, and controlled remediation of transactional anomalies, settlement discrepancies, and payment exceptions.
 
 ---
 
-## Python Version
-- **Requires**: Python `>= 3.10` (Tested on `Python 3.14`)
+## 📑 Table of Contents
+
+- [About the Project](#about-the-project)
+  - [Product Vision & System Boundaries](#product-vision--system-boundaries)
+  - [Key Operational Scenarios](#key-operational-scenarios)
+  - [Core Features](#core-features)
+  - [Monorepo Architecture](#monorepo-architecture)
+  - [Built With](#built-with)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Setup & Configuration](#setup--configuration)
+  - [Running with Docker Compose](#running-with-docker-compose)
+  - [Local Service Development](#local-service-development)
+  - [Running Tests](#running-tests)
+- [Financial Integrity & Security Safeguards](#financial-integrity--security-safeguards)
+  - [Dual-Control / Maker-Checker Workflows](#dual-control--maker-checker-workflows)
+  - [Idempotent Resolution Engine](#idempotent-resolution-engine)
+  - [Tamper-Evident Audit Logging](#tamper-evident-audit-logging)
+- [Roadmap & Planned Capabilities](#roadmap--planned-capabilities)
+- [Branching & Release Governance](#branching--release-governance)
+- [License](#license)
+- [Contact & Support](#contact--support)
 
 ---
 
-## Installation & Setup
+## 📖 About the Project
 
-1. **Clone the repository:**
+### Product Vision & System Boundaries
+
+SMARTREVERSAL is engineered specifically to eliminate blind spots in payment processing and financial operations. 
+
+- **What it IS**: An intelligent orchestration and investigation layer that integrates with core banking systems, settlement networks, switch logs, and payment gateways to identify discrepancies, track aged suspense balances, cluster failure patterns, and coordinate authorized financial resolutions.
+- **What it is NOT**: SMARTREVERSAL is **not** a retail consumer banking application, a digital wallet, or an independent settlement rail. It operates as an authorized operational overlay communicating via secure APIs and adapters.
+
+### Key Operational Scenarios
+
+SMARTREVERSAL addresses the mission-critical edge cases of modern electronic payment operations:
+
+1. **Debit Without Credit (DWC)**: Customer account debited on sending institution, but beneficiary never credited due to downstream switch or gateway failure.
+2. **Duplicate Debits / Credits**: Repeated processing triggered by retries, network glitches, or misconfigured retry schedules.
+3. **Pending / Delayed / Uncertain States**: Indeterminate statuses spanning multiple ledger settlement windows.
+4. **Duplicate Webhook & Payment Events**: Repeated webhook callbacks causing erroneous secondary ledger entries.
+5. **Reconciliation Discrepancies**: Mismatches between internal transaction ledgers, third-party processor logs (NIP, POS, Card rails), and clearing reports.
+6. **Suspense Balance Tracking**: Unreconciled differences and aged suspense account items requiring audit-backed resolution.
+7. **Failed or Delayed Reversals**: Reversal requests that were initiated but timed out, rejected, or partially posted.
+
+### Core Features
+
+- **Automated Discrepancy Matching**: 2-way and 3-way multi-source reconciliation matrix.
+- **AI-Driven Root Cause Diagnosis**: Machine learning analysis to cluster recurring switch error patterns and recommend remediation steps with clear explanations.
+- **Controlled Reversal Execution**: Automated or human-in-the-loop dispatch of reversal instructions through authenticated adapter rails.
+- **Maker-Checker Enforcement**: Dual-authorization requirement preventing unilateral adjustments or high-value reversals.
+- **Immutable Audit Trail**: Cryptographically traceable event log recording all actions, timestamps, and user identities.
+
+---
+
+### Monorepo Architecture
+
+```text
+smartreversal/
+├── apps/
+│   ├── api/             # High-performance Go + Chi backend financial transaction engine
+│   ├── ai-service/      # Python + FastAPI machine learning & anomaly clustering service
+│   └── web/             # Enterprise operations console in React 19, TypeScript & Vite
+├── packages/
+│   ├── api-contracts/   # OpenAPI 3.1 single source of truth schemas
+│   └── ui/              # Shared design tokens & accessible financial UI components
+├── infra/
+│   ├── docker/          # Multi-stage production and development Dockerfiles
+│   └── scripts/         # Environment bootstrapping and database seeding scripts
+├── tests/
+│   ├── integration/     # Cross-service integration test suites
+│   ├── e2e/             # End-to-end browser workflows
+│   └── fixtures/        # Mock settlement files (NIP, POS, Card reports)
+├── docs/                # Architecture design records (ADR), security models, runbooks
+├── compose.yaml         # Complete local multi-container composition
+└── Makefile             # Developer ergonomics
+```
+
+---
+
+### Built With
+
+- **Backend**: [Go (1.27.2)](https://go.dev/) with [Chi](https://github.com/go-chi/chi) HTTP routing.
+- **AI & Analytics**: [Python (3.13+)](https://www.python.org/) with [FastAPI](https://fastapi.tiangolo.com/), Pydantic, and Scikit-Learn.
+- **Frontend Console**: [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Vite](https://vitejs.dev/).
+- **Database & Cache**: [PostgreSQL 16](https://www.postgresql.org/) and [Redis 7](https://redis.io/).
+- **Containerization**: [Docker](https://www.docker.com/) & Docker Compose.
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+Ensure you have the following installed on your host system:
+- **Git** (2.30+)
+- **Go** (1.27.2)
+- **Node.js** (v20+) & **npm** (v10+)
+- **Python** (3.11+)
+- **Docker Engine** & **Docker Compose**
+
+### Setup & Configuration
+
+1. Clone the private repository:
    ```bash
-   git clone https://github.com/OLAMIGHTY010/reverseit.git
-   cd reverseit
+   git clone git@github.com:smartreversal/smartreversal.git
+   cd smartreversal
    ```
 
-2. **Create and activate a virtual environment:**
-   ```bash
-   # macOS / Linux
-   python -m venv venv
-   source venv/bin/activate
-
-   # Windows
-   python -m venv venv
-   venv\Scripts\activate
-   ```
-
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Environment variables:**
+2. Copy the environment variables:
    ```bash
    cp .env.example .env
    ```
-   Add your optional `ANTHROPIC_API_KEY` in `.env` for LLM parsing fallback. (Never commit `.env`!).
 
-5. **Run the server:**
-   ```bash
-   uvicorn app.main:app --reload
-   ```
-   - Health check: `http://127.0.0.1:8000/` (returns `{"status": "ok", "app": "ReverseIt"}`)
-   - Interactive docs: `http://127.0.0.1:8000/docs`
+3. Review `.env` and configure credentials suitable for your local development environment.
 
-6. **Run tests:**
-   ```bash
-   pytest
-   ```
+### Running with Docker Compose
 
----
+To launch the complete infrastructure (Postgres, Redis, Go API, Python AI Service, and Web Console):
 
-## Core Function Signatures (Agreed with Pairs)
-
-### 1. Alert Parser
-```python
-def parse_alert(text: str) -> dict:
-    ...
+```bash
+docker compose up --build -d
 ```
-- **Success shape**:
-  ```json
-  {
-    "amount": 20000.0,
-    "date": "2026-10-13",
-    "time": "14:05",
-    "channel": "pos",
-    "bank": "ExampleBank",
-    "reference": "12345"
-  }
-  ```
-- **Failure shape**:
-  ```json
-  {
-    "error": "could_not_parse",
-    "missing": ["amount", "reference"]
-  }
-  ```
-- Note: `channel` is strictly one of: `"atm"`, `"pos"`, `"transfer"`, `"web"`.
 
-### 2. Deadline Calculator
-```python
-def compute_deadline(channel: str, transaction_time: datetime) -> datetime:
-    ...
+- **Web Operations Console**: `http://localhost:3000`
+- **Core API Gateway**: `http://localhost:8080` (Healthcheck: `http://localhost:8080/health`)
+- **AI Analytics Service**: `http://localhost:8000` (API Docs: `http://localhost:8000/docs`)
+- **PostgreSQL**: `localhost:5432`
+- **Redis**: `localhost:6379`
+
+### Local Service Development
+
+Alternatively, services can be executed natively for faster feedback:
+
+```bash
+# 1. Install frontend and shared dependencies
+npm install
+
+# 2. Run Go API
+cd apps/api
+go run cmd/api/main.go
+
+# 3. Run AI Service (in a virtualenv)
+cd apps/ai-service
+python -m venv .venv
+# activate virtualenv: .venv\Scripts\activate (Windows) or source .venv/bin/activate (Linux/Mac)
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+
+# 4. Run Web Console
+npm run dev:web
 ```
-- Computed by **deterministic regulatory rules only** (never by LLM).
-- Reversal windows defined in a single centralized config dictionary in `app/deadlines.py`.
 
-### 3. Complaint Letter Generator
-```python
-def generate_letter(kind: str, dispute: dict | object) -> str:
-    ...
-```
-- `kind`: `"bank"` (demand for immediate refund) or `"cbn"` (Consumer Protection Department escalation petition).
+### Running Tests
 
----
+```bash
+# Backend unit tests
+cd apps/api && go test -v -race ./...
 
-## Database Model (`models.py`)
+# AI service unit tests
+cd apps/ai-service && pytest
 
-SQLite database (`reverseit.db`) managed via SQLAlchemy.
-
-| Field | Type | Description |
-|---|---|---|
-| `id` | Integer (PK) | Auto-incrementing primary key |
-| `amount` | Float | Transaction amount debited |
-| `channel` | String | `"atm"`, `"pos"`, `"transfer"`, `"web"` |
-| `bank` | String | Bank / financial institution name |
-| `reference` | String | Unique transaction reference or session ID |
-| `transaction_time` | DateTime | Timestamp when the transaction took place |
-| `deadline` | DateTime | Regulatory deadline for reversal |
-| `status` | String | Current dispute resolution state |
-
-### Allowed Status Values:
-- `awaiting_reversal`: Initial state within regulatory turnaround window.
-- `due_soon`: Nearing regulatory deadline (e.g. within 2 hours).
-- `deadline_passed`: Window expired without reversal; eligible for CBN escalation.
-- `resolved`: Transaction successfully reversed or resolved.
-
----
-
-## API Routes (`app/main.py`)
-
-All routes are kept thin, delegating core logic to specialized modules:
-
-- `GET /` — Health check status (`{"status": "ok", "app": "ReverseIt"}`).
-- `POST /disputes` — Accepts debit alert text; parses fields, calculates deadline via rule engine, and saves to SQLite.
-- `GET /disputes` — Lists all disputes (optional filter query parameter: `?status=...`).
-- `PATCH /disputes/{id}` — Updates dispute status (`status: "awaiting_reversal" | "due_soon" | "deadline_passed" | "resolved"`).
-- `POST /disputes/{id}/letter?kind=bank|cbn` — Generates formatted bank demand letter or CBN petition.
-
----
-
-## Scheduler (`app/scheduler.py`)
-
-Runs periodic checks in the background using `APScheduler`:
-- Checks active disputes (`awaiting_reversal` and `due_soon`).
-- Automatically transitions disputes to `due_soon` when within the approaching threshold.
-- Automatically transitions disputes to `deadline_passed` once the deadline has elapsed.
-
----
-
-## Project Layout
-
-```
-├── app/
-│   ├── __init__.py
-│   ├── database.py       # SQLite connection and session management
-│   ├── deadlines.py      # Rule-based reversal turnaround windows & compute_deadline
-│   ├── letters.py        # Formal dispute letter templates (Bank & CBN)
-│   ├── main.py           # FastAPI application & thin routes
-│   ├── models.py         # SQLAlchemy Dispute model & statuses
-│   ├── parser.py         # Regex extraction & LLM fallback parser
-│   └── scheduler.py      # Background deadline monitoring job
-├── data/
-│   └── sample_alerts/    # Sample debit alert datasets
-│       └── samples.json
-├── static/               # Frontend static assets
-├── tests/
-│   ├── test_backend.py   # Full backend test suite
-│   └── test_main.py      # Root endpoint test
-├── .env.example          # Environment template (names only, no secrets)
-├── .gitignore            # Ignores .env, *.db, pycache, virtualenvs
-├── pytest.ini            # Pytest configuration
-├── requirements.txt      # Python dependencies with version note
-└── README.md             # Project documentation & team signatures
+# Frontend type checking
+npm run typecheck
 ```
 
 ---
 
-## Rules
-- One branch per task, a pull request for every change, no pushing directly to `main`.
-- Never commit `.env`, `*.db`, or any API keys.
-- Keep routes thin and modular.
+## 🛡️ Financial Integrity & Security Safeguards
+
+### Dual-Control / Maker-Checker Workflows
+Financial remediation actions (such as initiating automated reversals or posting manual adjustment vouchers) cannot be dispatched unilaterally. An **Analyst (Maker)** proposes the action with evidence, and an **Approver (Checker)** verifies and authorizes the execution.
+
+### Idempotent Resolution Engine
+Every outgoing resolution instruction generates a unique cryptographic idempotency key:
+$$\text{IdempotencyKey} = \text{HMAC-SHA256}(\text{TransactionRef} + \text{DiscrepancyType} + \text{ApprovedTimestamp})$$
+This guarantees that repeated network dispatches cannot trigger multiple credits or duplicate reversals.
+
+### Tamper-Evident Audit Logging
+Every user intervention, automated scan result, status transition, and system dispatch is written to an append-only audit trail with correlation IDs, timestamps, and operator identity.
+
+---
+
+## 🧭 Branching & Release Governance
+
+This repository adheres to strict release protection:
+- `main`: **Protected branch**. Production releases only. Direct commits and force pushes are blocked.
+- `develop`: Primary integration branch for active development.
+- `feature/*` & `fix/*`: Feature branches merged into `develop` via peer-reviewed Pull Requests.
+
+---
+
+## 🔒 License
+
+This repository is **PROPRIETARY and CONFIDENTIAL**.
+Copyright &copy; 2026 SMARTREVERSAL. All rights reserved.
+
+---
+
+## 💬 Contact & Support
+
+For operational access, integration inquiries, or internal support:
+- **Engineering Desk**: `engineering@smartreversal.internal`
+- **Security & Financial Integrity**: `security@smartreversal.internal`

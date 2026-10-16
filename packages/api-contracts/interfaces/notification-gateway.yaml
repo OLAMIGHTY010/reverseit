@@ -1,0 +1,82 @@
+openapi: 3.0.3
+info:
+  title: SMS and email gateway (outbound)
+  version: 0.1.0
+  description: |
+    Sends customer and operations messages. The engine decides what to say and
+    when. Customer messages that claim a refund are sent only after the outcome
+    is verified.
+
+    Track H: the mock notification service records messages and never sends.
+servers:
+  - url: http://localhost:9103
+paths:
+  /messages:
+    post:
+      operationId: sendMessage
+      summary: Send one message
+      description: Safe to retry with the same dedupe_key. A repeat returns the first result.
+      x-status: planned
+      x-phase: B7
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Message' }
+      responses:
+        '202':
+          description: Accepted for delivery.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageReceipt' }
+        '200':
+          description: Repeat of an earlier dedupe_key.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageReceipt' }
+        '422': { description: Invalid recipient or content. }
+        '503': { description: Provider unavailable. The engine retries with backoff. }
+  /messages/{id}:
+    get:
+      operationId: getMessageStatus
+      summary: Delivery status
+      x-status: planned
+      x-phase: B7
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Current delivery status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageReceipt' }
+        '404': { description: Unknown message. }
+components:
+  schemas:
+    Message:
+      type: object
+      required: [dedupe_key, channel, recipient_token, template_id, template_version, body]
+      properties:
+        dedupe_key: { type: string, maxLength: 200 }
+        channel: { type: string, enum: [SMS, EMAIL] }
+        recipient_token:
+          type: string
+          description: Token resolved to a number or address inside the gateway. The engine does not hold it in logs.
+        template_id: { type: string }
+        template_version: { type: integer, minimum: 1 }
+        stage:
+          type: string
+          enum: [DETECTED, VERIFIED]
+        body: { type: string, maxLength: 1600 }
+        encoding:
+          type: string
+          enum: [GSM, UNICODE]
+    MessageReceipt:
+      type: object
+      required: [id, status, simulated]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [QUEUED, SENT, DELIVERED, FAILED, REJECTED] }
+        failure_reason: { type: string }
+        provider_ref: { type: string }
+        simulated: { type: boolean }

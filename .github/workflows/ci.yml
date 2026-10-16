@@ -1,0 +1,180 @@
+name: CI - Financial Operations Platform Verification
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ----------------------------------------------------------------------------
+  # Job 1: Go Backend API Linting & Tests
+  # ----------------------------------------------------------------------------
+  api-verification:
+    name: Go Backend API Verification
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: app
+          POSTGRES_PASSWORD: ci_only_password
+          POSTGRES_DB: smartreversal_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U app -d smartreversal_test"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 20
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgres://app:ci_only_password@localhost:5432/smartreversal_test?sslmode=disable
+      TEST_REDIS_ADDR: localhost:6379
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+
+      - name: Verify Go Modules
+        run: go mod verify
+
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)"
+
+      - name: Build
+        run: go build ./...
+
+      - name: Run Go Vet & Lints
+        run: go vet ./...
+
+      - name: Install PostgreSQL and Redis client tools
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y postgresql-client redis-tools
+
+      - name: Wait for Postgres and Redis
+        run: |
+          for i in $(seq 1 30); do
+            if pg_isready -h localhost -p 5432 -U app -d smartreversal_test; then
+              echo "Postgres is ready"
+              break
+            fi
+            echo "Waiting for Postgres..."
+            sleep 2
+          done
+
+          for i in $(seq 1 30); do
+            if redis-cli -h localhost -p 6379 ping | grep -q PONG; then
+              echo "Redis is ready"
+              break
+            fi
+            echo "Waiting for Redis..."
+            sleep 1
+          done
+
+      # Integration tests share one database, so packages run one at a time.
+      # A test that skips for lack of services fails this job instead.
+      - name: Run Go Tests with Race Detector
+        run: |
+          go test -p 1 -race -count=1 -v ./... | tee test.log
+          if grep -q -- '--- SKIP' test.log; then
+            echo "A test was skipped; integration services are required in CI" >&2
+            exit 1
+          fi
+
+      - name: Vulnerability scan
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+  # ----------------------------------------------------------------------------
+  # Secret scan over the full history
+  # ----------------------------------------------------------------------------
+  secret-scan:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo" zricethezav/gitleaks:v8.30.1 \
+            git /repo --config /repo/.gitleaks.toml --redact --no-banner
+
+  # ----------------------------------------------------------------------------
+  # Job 2: Python AI Service Verification
+  # ----------------------------------------------------------------------------
+  ai-verification:
+    name: Python AI Service Verification
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/ai-service
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Python Unit Tests
+        run: pytest
+
+  # ----------------------------------------------------------------------------
+  # Job 3: Web Console & Shared Packages (Node/TypeScript)
+  # ----------------------------------------------------------------------------
+  web-verification:
+    name: Web Console & Packages Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Typecheck Workspaces
+        run: npm run typecheck --if-present
+
+      - name: Build Web Application
+        run: npm run build:web

@@ -1,0 +1,178 @@
+openapi: 3.0.3
+info:
+  title: Customer app and ALAT integration (ReverseIt)
+  version: 0.1.0
+  description: |
+    What the customer app calls. Every call is authorised as the customer and
+    returns only that customer's own data. Alert parsing never triggers financial
+    action: extracted fields are shown to the customer for confirmation first.
+
+    Track H: standalone web app against these endpoints. An ALAT integration, if
+    one is agreed, implements the same file.
+servers:
+  - url: http://localhost:8080
+security:
+  - customerAuth: []
+paths:
+  /v1/customer/reports:
+    post:
+      operationId: createReport
+      summary: Submit a debit alert (pasted text or screenshot)
+      description: Requires explicit consent. Parsed fields are returned for confirmation.
+      x-status: planned
+      x-phase: B10
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [consent, alert_text]
+              properties:
+                consent: { type: boolean, enum: [true] }
+                alert_text: { type: string, maxLength: 4000 }
+      responses:
+        '201':
+          description: Report created with fields parsed so far.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+        '422': { description: Consent missing or alert text invalid. }
+        '429': { description: Rate limited. }
+  /v1/customer/reports/{id}/confirm:
+    post:
+      operationId: confirmReport
+      summary: Confirm or correct the extracted fields
+      description: Uncertain fields must be confirmed before the report is matched.
+      x-status: planned
+      x-phase: B10
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount_minor, currency, occurred_at]
+              properties:
+                amount_minor: { type: integer, format: int64 }
+                currency: { type: string, pattern: '^[A-Z]{3}$' }
+                occurred_at: { type: string, format: date-time }
+                account_tail: { type: string, pattern: '^[0-9]{4}$' }
+                reference: { type: string }
+      responses:
+        '200':
+          description: Report matched to a transaction, or recorded as an unmatched claim.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+        '404': { description: No such report for this customer. }
+  /v1/customer/reports/{id}/submit:
+    post:
+      operationId: submitComplaint
+      summary: Submit the complaint to the shared exception queue
+      description: Creates a customer-reported case (CUS001) with the evidence attached.
+      x-status: planned
+      x-phase: B10
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+      responses:
+        '201':
+          description: Case created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CaseSummary' }
+        '404': { description: No such report for this customer. }
+        '409': { description: Report already submitted. }
+  /v1/customer/cases:
+    get:
+      operationId: listMyCases
+      summary: The customer's own cases
+      x-status: planned
+      x-phase: B10
+      responses:
+        '200':
+          description: Cases owned by the caller.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/CaseSummary' }
+                  next_cursor: { type: string }
+  /v1/customer/cases/{id}:
+    get:
+      operationId: getMyCase
+      summary: Case status timeline and escalation information
+      description: Returns 404 for a case that belongs to someone else.
+      x-status: planned
+      x-phase: B10
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Case detail.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CaseSummary' }
+        '404': { description: Not found for this customer. }
+components:
+  securitySchemes:
+    customerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Customer audience token, separate from operator tokens.
+  schemas:
+    Report:
+      type: object
+      required: [report_id, status, simulated]
+      properties:
+        report_id: { type: string }
+        status: { type: string, enum: [NEEDS_CONFIRMATION, MATCHED, UNMATCHED, SUBMITTED] }
+        parsed_fields:
+          type: array
+          items:
+            type: object
+            required: [name, value, confidence]
+            properties:
+              name: { type: string }
+              value: { type: string }
+              confidence: { type: string, enum: [HIGH, MEDIUM, LOW] }
+        parser: { type: string, enum: [RULES, AI] }
+        simulated: { type: boolean }
+    CaseSummary:
+      type: object
+      required: [case_id, state, simulated]
+      properties:
+        case_id: { type: string }
+        classification: { type: string, example: CUS001 }
+        state: { type: string }
+        regulatory_deadline:
+          type: string
+          format: date-time
+          description: From the clock registry. Shown with its source status (VERIFY).
+          x-verify: true
+        internal_target: { type: string, format: date-time }
+        timeline:
+          type: array
+          items:
+            type: object
+            required: [at, label]
+            properties:
+              at: { type: string, format: date-time }
+              label: { type: string }
+        simulated: { type: boolean }

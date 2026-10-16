@@ -1,0 +1,10 @@
+REVOKE USAGE ON SEQUENCE outbox_events_id_seq FROM sr_app;
+REVOKE SELECT, INSERT ON processed_events FROM sr_app;
+REVOKE SELECT, INSERT ON outbox_events FROM sr_app;
+DROP POLICY tenant_isolation ON processed_events;
+DROP POLICY tenant_isolation ON outbox_events;
+ALTER TABLE processed_events DISABLE ROW LEVEL SECURITY;
+ALTER TABLE outbox_events DISABLE ROW LEVEL SECURITY;
+ALTER TABLE processed_events DROP COLUMN tenant_id;
+DROP INDEX outbox_events_tenant_idx;
+ALTER TABLE outbox_events DROP COLUMN tenant_id;

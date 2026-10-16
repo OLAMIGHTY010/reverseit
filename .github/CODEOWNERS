@@ -1,0 +1,29 @@
+# ==============================================================================
+# SMARTREVERSAL CODE OWNERS & APPROVAL ENFORCEMENT
+# ==============================================================================
+# Required reviewers for all pull requests targeting develop or main branches.
+
+# Global Monorepo Overseers
+*       @smartreversal/core-leads
+
+# Core Financial Transaction & Reversal Engine
+apps/api/internal/reversals/        @smartreversal/financial-integrity @smartreversal/secops
+apps/api/internal/transactions/     @smartreversal/financial-integrity
+apps/api/internal/reconciliation/   @smartreversal/financial-integrity
+apps/api/internal/audit/            @smartreversal/secops
+apps/api/migrations/                @smartreversal/dba-leads
+
+# AI & Anomaly Clustering Service
+apps/ai-service/                    @smartreversal/ml-leads
+
+# Frontend Operations Console & UI Components
+apps/web/                           @smartreversal/frontend-leads
+packages/ui/                        @smartreversal/frontend-leads
+
+# API Contracts & Schemas
+packages/api-contracts/             @smartreversal/core-leads
+
+# Security & Governance
+SECURITY.md                         @smartreversal/secops
+docs/financial-integrity/           @smartreversal/financial-integrity @smartreversal/secops
+.github/workflows/                  @smartreversal/devops-leads

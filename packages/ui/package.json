@@ -1,0 +1,21 @@
+{
+  "name": "@smartreversal/ui",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared design tokens and accessible React components for SMARTREVERSAL platform",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "echo 'UI package ready'"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.8",
+    "@types/react-dom": "^19.0.3",
+    "typescript": "^5.7.3"
+  }
+}
