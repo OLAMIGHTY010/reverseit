@@ -25,7 +25,7 @@ export const ExecutiveReportsView: React.FC = () => {
           }`}
         >
           <BarChart3 className="w-4 h-4" />
-          <span>Screen 14: Executive KPIs & Recovery</span>
+          <span>Executive KPIs & Recovery</span>
         </button>
 
         <button
@@ -37,7 +37,7 @@ export const ExecutiveReportsView: React.FC = () => {
           }`}
         >
           <FileText className="w-4 h-4" />
-          <span>Screen 15: CBN Regulatory Return Generator</span>
+          <span>CBN Regulatory Return Generator</span>
         </button>
 
         <button
@@ -49,7 +49,7 @@ export const ExecutiveReportsView: React.FC = () => {
           }`}
         >
           <Flame className="w-4 h-4" />
-          <span>Screen 16: Merchant & Terminal Risk Heatmap</span>
+          <span>Merchant & Terminal Risk Heatmap</span>
         </button>
       </div>
 
