@@ -130,7 +130,7 @@ export const RulesAndHealthView: React.FC = () => {
           }`}
         >
           <Sliders className="w-4 h-4" />
-          <span>Screen 12: Business Rules & SLA Thresholds</span>
+          <span>Business Rules & SLA Thresholds</span>
         </button>
 
         <button
@@ -142,7 +142,7 @@ export const RulesAndHealthView: React.FC = () => {
           }`}
         >
           <Activity className="w-4 h-4" />
-          <span>Screen 13: Core Banking & Switch Integration Health</span>
+          <span>Core Banking & Switch Integration Health</span>
         </button>
       </div>
 
