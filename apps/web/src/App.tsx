@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { AppShell } from './shell/AppShell';
 import { CustomerShell } from './shell/CustomerShell';
