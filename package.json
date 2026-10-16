@@ -8,7 +8,11 @@
     "packages/ui",
     "packages/api-contracts"
   ],
-  "scripts": {
+    "dev": "node dev-all.mjs",
+    "dev:all": "node dev-all.mjs",
+    "migrate": "node migrate.mjs up",
+    "migrate:status": "node migrate.mjs status",
+    "migrate:seed": "node migrate.mjs seed",
     "dev:web": "npm run dev --workspace=apps/web",
     "build:web": "npm run build --workspace=apps/web",
     "build:ui": "npm run build --workspace=packages/ui",
