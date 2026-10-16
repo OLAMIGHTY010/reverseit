@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Events>
+  <Event id="EV-3001">
+    <Code>DR</Code><Time>2026-10-15T09:00:00Z</Time><Instr>INS-3001</Instr><Channel>GATEWAY</Channel><Rail>NIP</Rail>
+    <Amount>18500.00</Amount><Ccy>NGN</Ccy><Debit>acct_0123456789abcdef0123456789abcdef</Debit><GwRef>GW-3001</GwRef>
+  </Event>
+  <Event id="EV-3002">
+    <Code>OK</Code><Time>2026-10-15T09:00:04Z</Time><Instr>INS-3001</Instr><Channel>GATEWAY</Channel><Rail>NIP</Rail>
+    <Amount>18500.00</Amount><Ccy>NGN</Ccy><Debit>acct_0123456789abcdef0123456789abcdef</Debit><GwRef>GW-3001</GwRef>
+  </Event>
+  <Event id="EV-3003">
+    <Code>DR</Code><Time>not a time</Time><Instr>INS-3002</Instr><Amount>18500.00</Amount><Debit>acct_0123456789abcdef0123456789abcdef</Debit>
+  </Event>
+</Events>

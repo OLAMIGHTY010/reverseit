@@ -1,0 +1,32 @@
+{
+  "name": "smartreversal-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-powered transaction investigation, reconciliation, exception management, and controlled financial transaction resolution platform.",
+  "workspaces": [
+    "apps/web",
+    "packages/ui",
+    "packages/api-contracts"
+  ],
+  "scripts": {
+    "dev": "node dev-all.mjs",
+    "dev:all": "node dev-all.mjs",
+    "migrate": "node migrate.mjs up",
+    "migrate:status": "node migrate.mjs status",
+    "migrate:seed": "node migrate.mjs seed",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build:web": "npm run build --workspace=apps/web",
+    "build:ui": "npm run build --workspace=packages/ui",
+    "test:web": "npm run test --workspace=apps/web",
+    "test": "npm run test --workspace=apps/web",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}

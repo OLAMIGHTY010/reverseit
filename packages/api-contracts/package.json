@@ -1,0 +1,11 @@
+{
+  "name": "@smartreversal/api-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OpenAPI 3.0 specifications and shared API schemas for SMARTREVERSAL platform",
+  "main": "openapi.yaml",
+  "scripts": {
+    "lint": "cd ../../apps/api && go test -count=1 ./internal/contract",
+    "validate": "cd ../../apps/api && go test -count=1 ./internal/contract"
+  }
+}

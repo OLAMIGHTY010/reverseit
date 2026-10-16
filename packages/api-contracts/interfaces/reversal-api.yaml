@@ -1,0 +1,98 @@
+openapi: 3.0.3
+info:
+  title: Reversal API (outbound)
+  version: 0.1.0
+  description: |
+    The only way the engine asks an outside system to return funds. Only the
+    reversal execution package may call it, and only after the eight-check gate
+    passes.
+
+    Acknowledgement is not completion. The submit call returns whether the
+    request was accepted. Posting is learned later from the status call and then
+    verified against the ledger.
+
+    Track H: the mock reversal service simulates success, rejection, timeout and
+    delayed posting. No money moves.
+servers:
+  - url: http://localhost:9102
+paths:
+  /reversals:
+    post:
+      operationId: submitReversal
+      summary: Submit a reversal
+      description: |
+        Safe to retry with the same Idempotency-Key. A timeout means UNKNOWN.
+        Check status with the same key. Never use a new key for the same debit.
+      x-status: planned
+      x-phase: B5
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReversalSubmission' }
+      responses:
+        '202':
+          description: Request accepted. Not a completed refund.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReversalAck' }
+        '200':
+          description: Same key and payload as an earlier request. Returns the earlier result.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReversalAck' }
+        '409': { description: Same key with a different payload. }
+        '422':
+          description: Rejected by the provider.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReversalAck' }
+        '503': { description: Provider unavailable. Outcome is UNKNOWN until status says otherwise. }
+  /reversals/{reference}:
+    get:
+      operationId: getReversalStatus
+      summary: Provider-side status of a reversal
+      x-status: planned
+      x-phase: B5
+      parameters:
+        - { name: reference, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Current provider status.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReversalAck' }
+        '404': { description: Unknown reference. }
+components:
+  schemas:
+    ReversalSubmission:
+      type: object
+      required: [institution_id, original_instruction_ref, amount_minor, currency, reason_code]
+      properties:
+        institution_id: { type: string }
+        original_instruction_ref: { type: string }
+        amount_minor: { type: integer, format: int64 }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        reason_code: { type: string }
+    ReversalAck:
+      type: object
+      required: [reference, accepted, processing, simulated]
+      properties:
+        reference: { type: string }
+        accepted:
+          type: string
+          enum: [ACCEPTED, REJECTED, PENDING]
+        processing:
+          type: string
+          enum: [NOT_STARTED, IN_PROGRESS, COMPLETED, FAILED]
+        rejection_reason: { type: string }
+        provider_code:
+          type: string
+          description: Raw provider code. Illustrative in Track H (VERIFY).
+          x-verify: true
+        simulated: { type: boolean }

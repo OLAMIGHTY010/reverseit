@@ -1,0 +1,87 @@
+openapi: 3.0.3
+info:
+  title: Transaction feed (inbound)
+  version: 0.1.0
+  description: |
+    How a source system (core banking, payment switch, gateway, card switch,
+    ATM or merchant platform) delivers transaction events. Delivery is at least
+    once. Events can arrive late and out of order.
+
+    Track H: the simulator calls this interface.
+    Same operation as `POST /v1/events` in the main API, restated here as the
+    contract a source system implements against.
+servers:
+  - url: http://localhost:8080
+paths:
+  /v1/events:
+    post:
+      operationId: deliverEvent
+      summary: Deliver one transaction event
+      x-status: planned
+      x-phase: B2
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: The source's own event reference.
+          schema: { type: string, minLength: 1, maxLength: 200 }
+        - name: X-Schema-Version
+          in: header
+          required: true
+          schema: { type: string, example: '1.2' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TransactionEvent' }
+      responses:
+        '202': { description: Accepted and queued. }
+        '200': { description: Exact duplicate of an event already accepted. }
+        '409': { description: Same key with a different payload. Raised as a data-quality alert. }
+        '422': { description: Schema error. The event goes to the dead-letter stream with the reason. }
+        '429': { description: Rate limited. Retry with backoff. }
+components:
+  schemas:
+    TransactionEvent:
+      type: object
+      required: [institution_id, source_system, source_event_ref, event_type, source_ts, txn, raw_payload_hash]
+      properties:
+        institution_id: { type: string }
+        source_system: { type: string }
+        source_event_ref: { type: string }
+        event_type:
+          type: string
+          description: Illustrative values only. Real event names come from each source (VERIFY).
+          x-verify: true
+          example: TRANSFER_RESPONSE_TIMEOUT
+        source_ts: { type: string, format: date-time }
+        seq:
+          type: integer
+          description: Per-transaction sequence number when the source provides one.
+        txn:
+          type: object
+          required: [instruction_ref, channel, rail, amount_minor, currency, debit_account_token]
+          properties:
+            instruction_ref: { type: string }
+            channel:
+              type: string
+              enum: [MOBILE, INTERNET, USSD, POS, ATM, CARD, GATEWAY, MERCHANT, API]
+            rail:
+              type: string
+              description: Illustrative. Real rail identifiers come from discovery (VERIFY).
+              x-verify: true
+              example: NIP
+            amount_minor: { type: integer, format: int64 }
+            currency: { type: string, pattern: '^[A-Z]{3}$' }
+            debit_account_token: { type: string }
+            beneficiary_bank: { type: string }
+        refs:
+          type: array
+          description: External references used for correlation.
+          items:
+            type: object
+            required: [type, value]
+            properties:
+              type: { type: string, enum: [RRN, STAN, SESSION_ID, LEDGER_ID, GATEWAY_REF, INSTRUCTION_REF] }
+              value: { type: string }
+        raw_payload_hash: { type: string }

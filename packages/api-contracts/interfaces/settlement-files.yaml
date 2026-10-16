@@ -1,0 +1,80 @@
+openapi: 3.0.3
+info:
+  title: Settlement and NIBSS response files (inbound)
+  version: 0.1.0
+  description: |
+    Delivery of settlement, statement and switch response files for
+    reconciliation. File layouts differ by provider. Each layout is described by
+    a versioned mapping, not by code.
+
+    The fixture `tests/fixtures/sample_settlement_nip.csv` is synthetic and shows
+    the shape used in Track H. Real layouts must be taken from the provider's
+    documentation (VERIFY).
+servers:
+  - url: http://localhost:8080
+paths:
+  /v1/settlement-files:
+    post:
+      operationId: uploadSettlementFile
+      summary: Upload a settlement or response file
+      description: |
+        The file is stored unmodified, hashed, scanned for size and type, and
+        then parsed with the named mapping. A file with the same hash for the
+        same provider and period is rejected as a duplicate.
+      x-status: planned
+      x-phase: B6
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200 }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, provider, kind, period_start, period_end, mapping_version]
+              properties:
+                file: { type: string, format: binary }
+                provider:
+                  type: string
+                  description: Illustrative provider key in Track H (VERIFY).
+                  x-verify: true
+                kind: { type: string, enum: [SETTLEMENT, LEDGER_STATEMENT, SWITCH_RESPONSE] }
+                period_start: { type: string, format: date }
+                period_end: { type: string, format: date }
+                mapping_version: { type: string }
+      responses:
+        '202':
+          description: File stored and queued for parsing.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [file_id, sha256]
+                properties:
+                  file_id: { type: string }
+                  sha256: { type: string }
+        '409': { description: Duplicate file. }
+        '413': { description: File too large. }
+        '415': { description: Unsupported file type. }
+        '422': { description: Metadata invalid. }
+components:
+  schemas:
+    SettlementRow:
+      type: object
+      description: Canonical row after mapping. Every source layout maps to this shape.
+      required: [provider, instruction_ref, amount_minor, currency, settled_on, status]
+      properties:
+        provider: { type: string }
+        instruction_ref: { type: string }
+        session_id: { type: string }
+        amount_minor: { type: integer, format: int64 }
+        currency: { type: string, pattern: '^[A-Z]{3}$' }
+        settled_on: { type: string, format: date }
+        status:
+          type: string
+          description: Illustrative. Real status values come from the provider (VERIFY).
+          x-verify: true
+          example: SETTLED

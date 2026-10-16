@@ -1,0 +1,204 @@
+@import "tailwindcss";
+
+/* SMARTREVERSAL Section 9 Design System
+   Enterprise Banking Operations Visual Language:
+   Trust, Precision, Control, Clarity, Financial Seriousness.
+   WCAG 2.2 AA / AAA Compliant Contrast Tokens.
+*/
+
+:root,
+:root[data-theme="daylight"] {
+  --canvas: #f8fafc;
+  --canvas-subdued: #f1f5f9;
+  --surface: #ffffff;
+  --surface-raised: #f8fafc;
+  --surface-border: #cbd5e1;
+  --surface-border-subtle: #e2e8f0;
+
+  /* Primary Brand Blue */
+  --primary: #0284c7;
+  --primary-hover: #0369a1;
+  --primary-active: #075985;
+  --primary-subtle: #e0f2fe;
+  --primary-contrast: #ffffff;
+
+  /* Deep slate-blue text (never pure black) */
+  --text-primary: #0f172a;    /* > 15:1 contrast against surface (AAA) */
+  --text-secondary: #334155;  /* > 9:1 contrast (AAA) */
+  --text-muted: #64748b;      /* > 4.6:1 contrast (AA) */
+
+  /* Focus Ring */
+  --focus-ring: #0284c7;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px 0 rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.03);
+
+  /* Status Tokens - Daylight */
+  --status-detected-bg: #f1f5f9;
+  --status-detected-border: #cbd5e1;
+  --status-detected-text: #0f172a;
+
+  --status-awaiting-bg: #fef3c7;
+  --status-awaiting-border: #fcd34d;
+  --status-awaiting-text: #78350f;
+
+  --status-investigating-bg: #e0f2fe;
+  --status-investigating-border: #7dd3fc;
+  --status-investigating-text: #0369a1;
+
+  --status-approval-bg: #f3e8ff;
+  --status-approval-border: #d8b4fe;
+  --status-approval-text: #6b21a8;
+
+  --status-submitted-bg: #ccfbf1;
+  --status-submitted-border: #5eead4;
+  --status-submitted-text: #115e59;
+
+  --status-verifying-bg: #ede9fe;
+  --status-verifying-border: #c4b5fd;
+  --status-verifying-text: #5b21b6;
+
+  --status-resolved-bg: #dcfce7;
+  --status-resolved-border: #86efac;
+  --status-resolved-text: #14532d;
+
+  --status-failed-bg: #fee2e2;
+  --status-failed-border: #fca5a5;
+  --status-failed-text: #991b1b;
+
+  --status-suppressed-bg: #f1f5f9;
+  --status-suppressed-border: #cbd5e1;
+  --status-suppressed-text: #475569;
+}
+
+:root[data-theme="soft-dim"] {
+  --canvas: #0f172a;
+  --canvas-subdued: #1e293b;
+  --surface: #1e293b;
+  --surface-raised: #334155;
+  --surface-border: #475569;
+  --surface-border-subtle: #334155;
+
+  /* Primary Brand Blue */
+  --primary: #38bdf8;
+  --primary-hover: #0ea5e9;
+  --primary-active: #0284c7;
+  --primary-subtle: #082f49;
+  --primary-contrast: #0f172a;
+
+  /* High contrast text */
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+
+  /* Focus Ring */
+  --focus-ring: #38bdf8;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.6);
+
+  /* Status Tokens - Soft Dim */
+  --status-detected-bg: #1e293b;
+  --status-detected-border: #475569;
+  --status-detected-text: #f8fafc;
+
+  --status-awaiting-bg: #451a03;
+  --status-awaiting-border: #b45309;
+  --status-awaiting-text: #fef3c7;
+
+  --status-investigating-bg: #082f49;
+  --status-investigating-border: #0284c7;
+  --status-investigating-text: #e0f2fe;
+
+  --status-approval-bg: #3b0764;
+  --status-approval-border: #9333ea;
+  --status-approval-text: #f3e8ff;
+
+  --status-submitted-bg: #042f2e;
+  --status-submitted-border: #0d9488;
+  --status-submitted-text: #ccfbf1;
+
+  --status-verifying-bg: #2e1065;
+  --status-verifying-border: #7c3aed;
+  --status-verifying-text: #ede9fe;
+
+  --status-resolved-bg: #052e16;
+  --status-resolved-border: #16a34a;
+  --status-resolved-text: #dcfce7;
+
+  --status-failed-bg: #450a0a;
+  --status-failed-border: #dc2626;
+  --status-failed-text: #fee2e2;
+
+  --status-suppressed-bg: #1e293b;
+  --status-suppressed-border: #334155;
+  --status-suppressed-text: #94a3b8;
+}
+
+/* Density Mode Variables */
+:root,
+:root[data-density="comfortable"] {
+  --table-cell-py: 12px;
+  --table-cell-px: 16px;
+  --table-font-size: 14px;
+  --button-sm-py: 6px;
+  --button-sm-px: 12px;
+  --button-md-py: 8px;
+  --button-md-px: 16px;
+}
+
+:root[data-density="compact"] {
+  --table-cell-py: 6px;
+  --table-cell-px: 10px;
+  --table-font-size: 13px; /* 13px minimum in dense tables */
+  --button-sm-py: 4px;
+  --button-sm-px: 10px;
+  --button-md-py: 6px;
+  --button-md-px: 12px;
+}
+
+/* Base Body - Desktop First Banking Operations Standard */
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--canvas);
+  color: var(--text-primary);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 14px; /* Operations body 14px */
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Accessibility Focus Visible */
+*:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* Monospace fonts for financial amounts, RRN, STAN, UUIDs */
+.font-mono-financial {
+  font-family: "JetBrains Mono", "SF Mono", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Scrollbars for dense operational tables */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--canvas-subdued);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surface-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}

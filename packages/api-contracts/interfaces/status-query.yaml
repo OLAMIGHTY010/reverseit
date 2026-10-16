@@ -1,0 +1,64 @@
+openapi: 3.0.3
+info:
+  title: Transaction status query (outbound)
+  version: 0.1.0
+  description: |
+    Used by the reversal gate to learn the latest outcome of a transaction from
+    its authoritative source. A timeout, an error or a missing answer is UNKNOWN,
+    never failure.
+
+    Track H: the mock status service answers with scripted outcomes.
+servers:
+  - url: http://localhost:9101
+paths:
+  /status-query:
+    post:
+      operationId: queryStatus
+      summary: Ask for the current outcome of a transaction
+      x-status: planned
+      x-phase: B5
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StatusQuery' }
+      responses:
+        '200':
+          description: Answer from the source.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StatusAnswer' }
+        '404': { description: The source has no record. Treated as UNKNOWN by the engine unless evidence says otherwise. }
+        '503': { description: Source unavailable. Treated as UNKNOWN. }
+components:
+  schemas:
+    StatusQuery:
+      type: object
+      required: [institution_id, instruction_ref, rail]
+      properties:
+        institution_id: { type: string }
+        instruction_ref: { type: string }
+        rail: { type: string }
+        session_id: { type: string }
+    StatusAnswer:
+      type: object
+      required: [outcome, source_system, as_of, simulated]
+      properties:
+        outcome:
+          type: string
+          description: |
+            CONFIRMED_SUCCESS and CONFIRMED_FAILURE are final. PENDING means the
+            source is still processing. UNKNOWN means the source cannot say.
+            CONFLICTING means two sources disagree.
+          enum: [CONFIRMED_SUCCESS, CONFIRMED_FAILURE, PENDING, UNKNOWN, CONFLICTING]
+        source_system: { type: string }
+        source_code:
+          type: string
+          description: Raw code from the source. Illustrative in Track H (VERIFY).
+          x-verify: true
+        as_of:
+          type: string
+          format: date-time
+          description: When the source produced the answer. Used for the freshness check.
+        evidence_ref: { type: string }
+        simulated: { type: boolean }
