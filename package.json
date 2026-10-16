@@ -8,6 +8,7 @@
     "packages/ui",
     "packages/api-contracts"
   ],
+  "scripts": {
     "dev": "node dev-all.mjs",
     "dev:all": "node dev-all.mjs",
     "migrate": "node migrate.mjs up",

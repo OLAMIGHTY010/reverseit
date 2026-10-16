@@ -45,6 +45,9 @@ dev-ai: ## Run the Python AI service locally
 dev-web: ## Run the Vite web operations console locally
 	npm run dev --workspace=apps/web
 
+dev-all: ## Run all three tiers locally (Go API + Python AI + Vite Web)
+	node scripts/dev-all.mjs
+
 # ------------------------------------------------------------------------------
 # Build & Compilation
 # ------------------------------------------------------------------------------

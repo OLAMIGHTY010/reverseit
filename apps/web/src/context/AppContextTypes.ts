@@ -13,6 +13,18 @@ export interface ToastItem {
   };
 }
 
+export type PortalMode = 'customer' | 'staff';
+
+export interface StaffUser {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  institution: string;
+  rawRoles?: string[];
+  mfa?: boolean;
+}
+
 export interface AppContextType {
   theme: ThemeMode;
   setTheme: (t: ThemeMode) => void;
@@ -22,6 +34,13 @@ export interface AppContextType {
   setRole: (r: Role) => void;
   environment: EnvironmentMode;
   setEnvironment: (env: EnvironmentMode) => void;
+  portalMode: PortalMode;
+  setPortalMode: (mode: PortalMode) => void;
+  isAuthenticated: boolean;
+  currentUser: StaffUser | null;
+  authToken: string | null;
+  loginStaff: (user: StaffUser, token?: string) => void;
+  logoutStaff: () => void;
   activeView: string;
   setActiveView: (view: string) => void;
   globalSearchOpen: boolean;

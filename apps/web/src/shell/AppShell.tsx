@@ -9,6 +9,10 @@ import {
   ChevronRight,
   Clock,
   BookOpen,
+  LogOut,
+  ChevronDown,
+  ArrowLeftRight,
+  Shield,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useApp } from '../context/AppContext';
@@ -37,9 +41,13 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     setGlobalSearchOpen,
     setSessionTimeoutOpen,
     addToast,
+    currentUser,
+    logoutStaff,
+    setPortalMode,
   } = useApp();
 
   const [alertsOpen, setAlertsOpen] = useState(false);
+  const [govDropdownOpen, setGovDropdownOpen] = useState(false);
   const [serviceStatus, setServiceStatus] = useState<ServiceTierStatus | null>(null);
 
   useEffect(() => {
@@ -61,7 +69,8 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     };
   }, []);
 
-  const navigationItems = [
+  // Primary operational tabs (Clean, core workflows)
+  const primaryNavItems = [
     { id: 'dashboard', label: 'Dashboard', roles: ['ANALYST_MAKER', 'SUPERVISOR_CHECKER', 'AUDITOR', 'ADMIN'] },
     { id: 'agent-intake', label: 'Agent Complaint Intake', roles: ['CONTACT_CENTRE_AGENT', 'BRANCH_AGENT', 'ANALYST_MAKER', 'SUPERVISOR_CHECKER', 'ADMIN'], badge: 'Live' },
     { id: 'reverseit', label: 'ReverseIt Customer Portal', roles: ['ANALYST_MAKER', 'SUPERVISOR_CHECKER', 'AUDITOR', 'ADMIN', 'CONTACT_CENTRE_AGENT', 'BRANCH_AGENT'], isSpecial: true },
@@ -77,8 +86,7 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     { id: 'storybook', label: 'Design System & Storybook', roles: ['ANALYST_MAKER', 'SUPERVISOR_CHECKER', 'AUDITOR', 'ADMIN'], isSpecial: true },
   ];
 
-  // Filter based on active role
-  const allowedNavItems = navigationItems.filter((item) => item.roles.includes(role));
+  const allowedPrimaryItems = primaryNavItems.filter((item) => item.roles.includes(role));
 
   const roleLabels: Record<Role, string> = {
     ANALYST_MAKER: 'Analyst Maker',
@@ -89,8 +97,14 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     BRANCH_AGENT: 'Branch Operations Agent',
   };
 
+  const allNavItems = [
+    ...primaryNavItems,
+    ...governanceNavItems.map((g) => ({ ...g, roles: ['ANALYST_MAKER', 'SUPERVISOR_CHECKER', 'AUDITOR', 'ADMIN'] })),
+    { id: 'storybook', label: 'Design System & Storybook', roles: [] },
+  ];
+
   const getBreadcrumb = () => {
-    const item = navigationItems.find((i) => i.id === activeView);
+    const item = allNavItems.find((i) => i.id === activeView);
     return item ? item.label : 'Operations Console';
   };
 
@@ -207,9 +221,22 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
             </button>
           </div>
 
-          {/* Right Controls: Role Switcher, Density, Theme, Alerts, Operator Avatar */}
+          {/* Right Controls: Staff Profile, Role Switcher, Density, Theme, Portal Switcher, Logout */}
           <div className="flex items-center gap-2 text-[12px]">
-            {/* Persona / Role Switcher */}
+            {/* Logged-in Staff Profile */}
+            <div className="hidden sm:flex items-center gap-2 bg-[var(--canvas-subdued)] border border-[var(--surface-border)] rounded px-2.5 py-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <div className="flex flex-col text-left">
+                <span className="text-[11px] font-bold text-[var(--text-primary)] leading-tight">
+                  {currentUser?.name || (role === 'SUPERVISOR_CHECKER' ? 'Chioma Eze' : 'Ade Bello')}
+                </span>
+                <span className="text-[10px] text-[var(--text-muted)] font-mono-financial leading-tight">
+                  {roleLabels[role]}
+                </span>
+              </div>
+            </div>
+
+            {/* Persona Switcher (Demo Convenience) */}
             <div className="flex items-center gap-1.5 bg-[var(--canvas-subdued)] border border-[var(--surface-border)] rounded px-2 py-1">
               <User className="w-3.5 h-3.5 text-[var(--text-muted)]" aria-hidden="true" />
               <label htmlFor="role-select" className="sr-only">
@@ -227,16 +254,25 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                     message: `Switched operational role to ${roleLabels[newRole]}`,
                   });
                 }}
-                className="bg-transparent text-[var(--text-primary)] font-medium focus:outline-none cursor-pointer"
+                className="bg-transparent text-[var(--text-primary)] font-medium focus:outline-none cursor-pointer text-xs"
               >
                 <option value="ANALYST_MAKER">Maker: Analyst</option>
                 <option value="SUPERVISOR_CHECKER">Checker: Supervisor</option>
-                <option value="CONTACT_CENTRE_AGENT">Agent: Contact Centre (Tier 1)</option>
-                <option value="BRANCH_AGENT">Agent: Branch Operations</option>
                 <option value="AUDITOR">Auditor (Read-Only)</option>
                 <option value="ADMIN">Admin: Systems</option>
               </select>
             </div>
+
+            {/* Switch to Customer Portal Button */}
+            <button
+              type="button"
+              onClick={() => setPortalMode('customer')}
+              className="p-1.5 px-2 rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--canvas-subdued)] border border-[var(--surface-border)] cursor-pointer flex items-center gap-1 text-xs font-medium"
+              title="Switch to Customer Dispute Portal"
+            >
+              <ArrowLeftRight className="w-3.5 h-3.5 text-[var(--primary)]" />
+              <span className="hidden lg:inline">Customer Portal</span>
+            </button>
 
             {/* Density Toggle (Comfortable vs Compact) */}
             <button
@@ -313,16 +349,35 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                 </div>
               )}
             </div>
+
+            {/* Logout Button */}
+            <button
+              type="button"
+              onClick={() => {
+                logoutStaff();
+                addToast({
+                  type: 'info',
+                  title: 'Logged Out',
+                  message: 'Staff session terminated.',
+                });
+              }}
+              className="p-1.5 px-2 rounded text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-rose-200 dark:border-rose-900 cursor-pointer flex items-center gap-1 text-xs font-semibold"
+              title="Log Out of Operations Console"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Sign Out</span>
+            </button>
           </div>
         </div>
 
-        {/* 3. Primary Navigation Bar */}
+        {/* 3. Primary Navigation Bar (5 Core Workflows + Governance Dropdown) */}
         <nav
           className="bg-[var(--surface)] border-t border-[var(--surface-border-subtle)] overflow-x-auto"
           aria-label="Primary Application Navigation"
         >
           <div className="max-w-7xl mx-auto px-4 flex items-center gap-1">
-            {allowedNavItems.map((item) => {
+            {/* Primary Core Operational Items */}
+            {allowedPrimaryItems.map((item) => {
               const isActive = activeView === item.id;
               return (
                 <button
@@ -333,12 +388,10 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                     'px-3.5 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap',
                     isActive
                       ? 'border-[var(--primary)] text-[var(--primary)] font-semibold'
-                      : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--surface-border)]',
-                    item.isSpecial && 'text-purple-700 hover:text-purple-900 font-semibold'
+                      : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--surface-border)]'
                   )}
                   aria-current={isActive ? 'page' : undefined}
                 >
-                  {item.isSpecial && <BookOpen className="w-3.5 h-3.5" />}
                   <span>{item.label}</span>
                   {item.badge && (
                     <span
@@ -355,6 +408,77 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
                 </button>
               );
             })}
+
+            {/* Governance & Intelligence Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setGovDropdownOpen((prev) => !prev)}
+                className={clsx(
+                  'px-3.5 py-2.5 text-[13px] font-medium border-b-2 transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap',
+                  governanceNavItems.some((g) => g.id === activeView)
+                    ? 'border-[var(--primary)] text-[var(--primary)] font-semibold'
+                    : 'border-transparent text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--surface-border)]'
+                )}
+              >
+                <Shield className="w-3.5 h-3.5 text-[var(--primary)]" />
+                <span>Governance & Intelligence</span>
+                <ChevronDown className="w-3.5 h-3.5 opacity-60" />
+              </button>
+
+              {govDropdownOpen && (
+                <div
+                  className="absolute left-0 top-full mt-1 w-72 bg-[var(--surface)] border border-[var(--surface-border)] rounded-md shadow-xl p-2 z-50 space-y-1"
+                  onMouseLeave={() => setGovDropdownOpen(false)}
+                >
+                  <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--text-muted)] border-b border-[var(--surface-border)] mb-1">
+                    Compliance & System Intelligence
+                  </div>
+                  {governanceNavItems.map((item) => {
+                    const isItemActive = activeView === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveView(item.id);
+                          setGovDropdownOpen(false);
+                        }}
+                        className={clsx(
+                          'w-full text-left p-2 rounded text-xs transition-colors cursor-pointer flex flex-col',
+                          isItemActive
+                            ? 'bg-[var(--primary-subtle)] text-[var(--primary)] font-bold'
+                            : 'hover:bg-[var(--canvas-subdued)] text-[var(--text-primary)]'
+                        )}
+                      >
+                        <span>{item.label}</span>
+                        <span className="text-[10px] text-[var(--text-muted)] font-normal">
+                          {item.desc}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Right-aligned Storybook / Design System discreet trigger */}
+            <div className="ml-auto flex items-center">
+              <button
+                type="button"
+                onClick={() => setActiveView('storybook')}
+                className={clsx(
+                  'px-2.5 py-1 text-[11px] font-mono-financial rounded border transition-colors cursor-pointer flex items-center gap-1',
+                  activeView === 'storybook'
+                    ? 'bg-purple-100 dark:bg-purple-950 text-purple-900 dark:text-purple-200 border-purple-300 font-bold'
+                    : 'text-[var(--text-muted)] border-transparent hover:border-[var(--surface-border)] hover:bg-[var(--canvas-subdued)]'
+                )}
+                title="Open Design System & Storybook"
+              >
+                <BookOpen className="w-3 h-3 text-purple-600" />
+                <span>Storybook & Specs</span>
+              </button>
+            </div>
           </div>
         </nav>
       </header>
