@@ -20,17 +20,6 @@ export const ReverseItHeader: React.FC<ReverseItHeaderProps> = ({
 
   return (
     <div className="space-y-3">
-      {/* Track H Mandatory Simulated Data Banner */}
-      <div className="px-4 py-1.5 bg-amber-500/15 border border-amber-500/30 rounded-md text-[12px] font-semibold text-amber-900 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Info className="w-4 h-4 text-amber-700" />
-          <span>SIMULATED DEMO MODE — Wema Bank Hackaholics 7.0 (Lagos Leg) Track H</span>
-        </div>
-        <span className="text-[11px] font-mono-financial bg-amber-200/60 px-2 py-0.5 rounded">
-          Regulatory Clock: WAT
-        </span>
-      </div>
-
       {/* Main ReverseIt Navigation Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-[var(--surface)] border border-[var(--surface-border)] rounded-md shadow-xs">
         <div className="flex items-center gap-3">
