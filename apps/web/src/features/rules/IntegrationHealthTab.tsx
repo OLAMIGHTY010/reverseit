@@ -33,7 +33,7 @@ export const IntegrationHealthTab: React.FC<IntegrationHealthTabProps> = ({
               Core Banking & Switch Integration Health Dashboard
             </h3>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono-financial">
-              Screen 13 • Live Circuit Breaker Matrix
+              Live Circuit Breaker Matrix
             </span>
           </div>
           <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
