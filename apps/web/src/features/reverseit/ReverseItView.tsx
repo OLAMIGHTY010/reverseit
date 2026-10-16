@@ -40,7 +40,17 @@ export const ReverseItView: React.FC = () => {
   const [clockInfo, setClockInfo] = useState<RegulatoryClockInfo>(
     REGULATORY_CLOCKS.failed_transfer
   );
-  const [cases, setCases] = useState<CustomerDisputeCase[]>(() => INITIAL_CUSTOMER_CASES);
+  const CUSTOMER_SESSION_CASES_KEY = 'smartreversal_customer_my_cases';
+
+  // Customers only see their own submitted cases. Never other customers' reports!
+  const [cases, setCases] = useState<CustomerDisputeCase[]>(() => {
+    try {
+      const saved = localStorage.getItem(CUSTOMER_SESSION_CASES_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [selectedCase, setSelectedCase] = useState<CustomerDisputeCase | null>(null);
 
   // S1 -> S2
@@ -138,7 +148,17 @@ export const ReverseItView: React.FC = () => {
       ],
     };
 
-    setCases((prev) => [newCase, ...prev]);
+    setCases((prev) => {
+      const updated = [newCase, ...prev];
+      try {
+        localStorage.setItem(CUSTOMER_SESSION_CASES_KEY, JSON.stringify(updated));
+      } catch {
+        // silent
+      }
+      return updated;
+    });
+    setSelectedCase(newCase);
+    setCurrentStep('S8_CASE_TRACKER');
     addToast({
       type: 'success',
       title: 'Dispute Queued as CUS001',
