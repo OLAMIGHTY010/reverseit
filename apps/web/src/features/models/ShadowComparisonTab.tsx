@@ -47,7 +47,7 @@ export const ShadowComparisonTab: React.FC<ShadowComparisonTabProps> = ({
               Shadow Mode Decision Matrix & Divergence Explorer
             </h3>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 font-mono-financial">
-              Screen 18 • Tri-Model Comparison
+              Tri-Model Comparison
             </span>
           </div>
           <p className="text-[12px] text-[var(--text-muted)] mt-0.5">
