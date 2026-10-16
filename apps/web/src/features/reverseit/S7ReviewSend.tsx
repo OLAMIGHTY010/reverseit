@@ -175,7 +175,7 @@ Account Holder (Verified via Mobile Session)`;
           <span>Editable Complaint Text</span>
           <span className="text-emerald-700 flex items-center gap-1">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Zero Hallucinations Verified (Prompt A9)</span>
+            <span>Zero Hallucinations Verified</span>
           </span>
         </div>
         <textarea
