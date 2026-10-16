@@ -12,12 +12,16 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/redis/go-redis/v9"
 
+	"github.com/smartreversal/smartreversal/apps/api/internal/inbound"
 	"github.com/smartreversal/smartreversal/apps/api/internal/outbox"
 	"github.com/smartreversal/smartreversal/apps/api/internal/platform/db"
 	"github.com/smartreversal/smartreversal/apps/api/internal/platform/dbtest"
 	"github.com/smartreversal/smartreversal/apps/api/internal/platform/redisx"
 	"github.com/smartreversal/smartreversal/apps/api/internal/server"
+	"github.com/smartreversal/smartreversal/apps/api/internal/stream"
+	"github.com/smartreversal/smartreversal/apps/api/internal/txn"
 )
 
 func deps(t *testing.T) Deps {
@@ -128,4 +132,41 @@ func waitFor(t *testing.T, cond func() bool, what string) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for: %s", what)
+}
+
+// syntheticAccount is a made-up account token, not a credential.
+const syntheticAccount = "acct_0123456789abcdef0123456789abcdef"
+
+func TestWorkerIngestsEventsSourcesWriteToTheInboundStream(t *testing.T) {
+	d := deps(t)
+	ctx := context.Background()
+	d.Redis.Del(ctx, inbound.Stream, stream.DeadLetterStream(inbound.Stream))
+	t.Cleanup(func() { d.Redis.Del(context.Background(), inbound.Stream, stream.DeadLetterStream(inbound.Stream)) })
+	tid := dbtest.Tenant(t, d.Pool)
+	d.Inbound = &inbound.Handler{Txn: &txn.Service{}}
+
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() { done <- Run(runCtx, d) }()
+
+	e := txn.Envelope{SourceSystem: "SWITCH_W", SourceEventRef: "EV-W-0001", EventType: txn.EvDebitPosted, SourceTS: time.Now().UTC().Add(-time.Minute),
+		Txn: txn.Core{InstructionRef: "INS-W-0001", Channel: "MOBILE", Rail: "NIP", AmountMinor: 1000, Currency: "NGN", DebitAccountToken: syntheticAccount}}
+	entry, err := inbound.Entry(tid, inbound.TypeEvent, e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Redis.XAdd(ctx, &redis.XAddArgs{Stream: inbound.Stream, Values: entry}).Err(); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool {
+		var n int
+		_ = d.Pool.WithTenant(ctx, tid, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, `SELECT count(*) FROM transactions WHERE instruction_ref = 'INS-W-0001'`).Scan(&n)
+		})
+		return n == 1
+	}, "the inbound event to be ingested")
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("worker stopped with %v", err)
+	}
 }

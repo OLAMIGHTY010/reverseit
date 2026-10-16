@@ -10,6 +10,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/smartreversal/smartreversal/apps/api/internal/audit"
 	"github.com/smartreversal/smartreversal/apps/api/internal/authz"
 	"github.com/smartreversal/smartreversal/apps/api/internal/platform/httpx"
 	"github.com/smartreversal/smartreversal/apps/api/internal/servauth"
@@ -43,6 +44,11 @@ func (s *Services) ingestEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if v := r.Header.Get("X-Schema-Version"); v != "" && !supportedSchema(v) {
+		httpx.WriteError(w, r, http.StatusBadRequest, "UNSUPPORTED_SCHEMA_VERSION", "X-Schema-Version "+v+" is not supported; this API reads 1.x")
+		return
+	}
+
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxEventBody))
 	if err != nil {
 		httpx.WriteError(w, r, http.StatusRequestEntityTooLarge, httpx.CodeBadRequest, "event body is too large")
@@ -63,6 +69,15 @@ func (s *Services) ingestEvent(w http.ResponseWriter, r *http.Request) {
 
 	var res txn.Result
 	err = s.Pool.WithTenant(r.Context(), svc.TenantID, func(tx pgx.Tx) error {
+		if env.InstitutionID != "" {
+			var code string
+			if err := tx.QueryRow(r.Context(), `SELECT code FROM institutions WHERE id = $1`, svc.TenantID).Scan(&code); err != nil {
+				return err
+			}
+			if code != env.InstitutionID {
+				return errInstitutionMismatch
+			}
+		}
 		var err error
 		res, err = s.Txn.Ingest(r.Context(), tx, svc.TenantID, env)
 		return err
@@ -77,7 +92,12 @@ func (s *Services) ingestEvent(w http.ResponseWriter, r *http.Request) {
 		s.quarantineEnvelope(r, svc, env, err.Error())
 		httpx.WriteError(w, r, http.StatusUnprocessableEntity, httpx.CodeValidation, err.Error())
 		return
+	case errors.Is(err, errInstitutionMismatch):
+		s.quarantineEnvelope(r, svc, env, err.Error())
+		httpx.WriteError(w, r, http.StatusUnprocessableEntity, httpx.CodeValidation, "institution_id does not match the institution these credentials belong to")
+		return
 	case errors.Is(err, txn.ErrConflict):
+		s.dataQualityAlert(r, svc, env)
 		httpx.WriteError(w, r, http.StatusConflict, httpx.CodeConflict, "source_event_ref was already used with different content")
 		return
 	default:
@@ -91,6 +111,36 @@ func (s *Services) ingestEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	httpx.WriteJSON(w, code, eventResponse{EventID: res.EventID.String(), TxnID: res.TxnID.String(),
 		LifecycleState: res.Lifecycle, Duplicate: res.Outcome == txn.Duplicate})
+}
+
+var errInstitutionMismatch = errors.New("institution_id does not match the institution of the sending service")
+
+// supportedSchema reports whether the schema version header names a 1.x version.
+func supportedSchema(v string) bool {
+	major, minor, ok := strings.Cut(strings.TrimSpace(v), ".")
+	if !ok || major != "1" || minor == "" || len(minor) > 4 {
+		return false
+	}
+	for _, c := range minor {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+// dataQualityAlert records that a source reused an event reference for different
+// content. It is an audit record naming the source and the reference, written in its
+// own transaction so it survives the refusal. It carries no event content.
+func (s *Services) dataQualityAlert(r *http.Request, svc *servauth.Principal, env txn.Envelope) {
+	_ = s.Pool.WithTenant(r.Context(), svc.TenantID, func(tx pgx.Tx) error {
+		_, err := s.Audit.Append(r.Context(), tx, svc.TenantID, audit.Event{
+			Actor: audit.ActorService, ActorID: svc.ServiceID, Action: "ingest.data_quality_conflict", SubjectType: "source_event",
+			SubjectID: env.SourceSystem + "/" + env.SourceEventRef, Details: map[string]any{"source_system": env.SourceSystem, "source_event_ref": env.SourceEventRef,
+				"rejected_payload_hash": env.Hash()},
+		})
+		return err
+	})
 }
 
 // quarantine records a rejected event in its own transaction. A failure to

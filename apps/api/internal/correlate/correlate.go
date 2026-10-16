@@ -31,13 +31,13 @@ import (
 // Observation is one piece of evidence from a source that identifies the
 // transaction only by its own references.
 type Observation struct {
-	SourceSystem   string            `json:"source_system"`
-	SourceEventRef string            `json:"source_event_ref"`
-	EventType      string            `json:"event_type"`
-	SourceTS       time.Time         `json:"source_ts"`
-	Refs           map[string]string `json:"refs"`
-	AmountMinor    txn.Amount        `json:"amount_minor"`
-	Currency       string            `json:"currency"`
+	SourceSystem   string     `json:"source_system"`
+	SourceEventRef string     `json:"source_event_ref"`
+	EventType      string     `json:"event_type"`
+	SourceTS       time.Time  `json:"source_ts"`
+	Refs           txn.Refs   `json:"refs"`
+	AmountMinor    txn.Amount `json:"amount_minor"`
+	Currency       string     `json:"currency"`
 }
 
 // ErrInvalid wraps every problem with an observation.

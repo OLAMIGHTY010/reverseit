@@ -7,9 +7,12 @@ import (
 
 	"github.com/smartreversal/smartreversal/apps/api/internal/platform/dbtest"
 	"github.com/smartreversal/smartreversal/apps/api/internal/sim"
+	"github.com/smartreversal/smartreversal/apps/api/internal/sources"
 )
 
-func play(t *testing.T, run sim.Run) Report {
+func play(t *testing.T, run sim.Run) Report { return playWith(t, run, Options{}) }
+
+func playWith(t *testing.T, run sim.Run, o Options) Report {
 	t.Helper()
 	pool := dbtest.Pool(t)
 	h := NewHarness(pool, dbtest.Tenant(t, pool), run.Start.Add(-time.Minute))
@@ -17,7 +20,7 @@ func play(t *testing.T, run sim.Run) Report {
 	if err := h.InstallPolicies(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if err := h.Play(ctx, run, Options{}); err != nil {
+	if err := h.Play(ctx, run, o); err != nil {
 		t.Fatal(err)
 	}
 	got, err := h.Observe(ctx)
@@ -128,5 +131,47 @@ func TestFiftyTransactionDemonstrationIsScoredAndLatencyIsReported(t *testing.T)
 	}
 	for code, l := range rep.Latency {
 		t.Logf("%s: n=%d p50=%.0fs p95=%.0fs max=%.0fs (simulated time)", code, l.N, l.P50, l.P95, l.Max)
+	}
+}
+
+func TestTheOutageFalsePositivesGoAwayOnceThePlatformKnowsWhatItsSourcesNormallyDo(t *testing.T) {
+	base, _ := sim.Generate(sim.Options{Seed: 12})
+	outage := sim.Perturbation{Outages: []sim.Outage{{Source: sim.SrcSwitch, From: base.Start.Add(2 * time.Minute), To: base.Start.Add(40 * time.Minute)}}}
+	run := sim.Perturb(base, outage, 1)
+
+	without := play(t, run)
+	with := playWith(t, run, Options{Expectations: map[string]sources.Expectation{
+		sim.SrcSwitch: {SourceSystem: sim.SrcSwitch, StaleAfterSec: 120, DownAfterSec: 300, MaxSkewSec: 60},
+	}})
+	count := func(r Report, what string) int {
+		n := 0
+		for _, m := range r.Mismatches {
+			if m.What == what {
+				n++
+			}
+		}
+		return n
+	}
+	for _, what := range []string{"unexpected UNK001 case", "unexpected DUP001 case"} {
+		t.Logf("%s: %d without expectations, %d with", what, count(without, what), count(with, what))
+	}
+	if count(without, "unexpected UNK001 case") == 0 || count(without, "unexpected DUP001 case") == 0 {
+		t.Fatal("the outage no longer produces the false positives this test is about; revisit it")
+	}
+	if n := count(with, "unexpected UNK001 case"); n != 0 {
+		t.Errorf("%d unknown cases were still raised for transfers only waiting on the silent source", n)
+	}
+	// A retry that arrives before the silent source has been noticed as silent (here, a
+	// retry ten seconds after the last word from the switch, while the source is still
+	// inside its stale threshold) is still judged on what is known. That is a limit of
+	// any silence-based check and is recorded, not hidden.
+	if n := count(with, "unexpected DUP001 case"); n > count(without, "unexpected DUP001 case") {
+		t.Errorf("%d retries were called duplicates, more than without expectations", n)
+	}
+	if with.LifecycleCorrect != with.Transactions {
+		t.Errorf("lifecycle correct for %d of %d", with.LifecycleCorrect, with.Transactions)
+	}
+	for _, m := range with.Mismatches {
+		t.Logf("remaining: %s (%s): %s", m.InstructionRef, m.Scenario, m.What)
 	}
 }

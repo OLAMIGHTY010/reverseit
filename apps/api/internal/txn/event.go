@@ -15,7 +15,9 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -49,6 +51,8 @@ var (
 	sourceRefRe    = regexp.MustCompile(`^[A-Za-z0-9._:-]{4,100}$`)
 	instructionRe  = regexp.MustCompile(`^[A-Za-z0-9._:-]{4,64}$`)
 	railRe         = regexp.MustCompile(`^[A-Z0-9_]{2,30}$`)
+	institutionRe  = regexp.MustCompile(`^[A-Za-z0-9._-]{1,40}$`)
+	rawHashRe      = regexp.MustCompile(`^[A-Za-z0-9:._-]{8,100}$`)
 	tokenRe        = regexp.MustCompile(`^acct_[0-9a-f]{32}$`)
 	bankRe         = regexp.MustCompile(`^[A-Za-z0-9 ._-]{0,60}$`)
 	sessionRe      = regexp.MustCompile(`^[A-Za-z0-9._:-]{0,64}$`)
@@ -62,12 +66,18 @@ const MaxAmountMinor int64 = 9_000_000_000_000_000
 // (D14), because many JSON readers lose precision on large integers.
 type Amount int64
 
-// UnmarshalJSON accepts only a quoted string of digits with no sign, no leading
-// zeros and no fraction.
+// UnmarshalJSON accepts a quoted string of digits, or a bare integer such as
+// 1850000 as the event contract's example shows. Either way it is read as text, so a
+// large value is exact. A sign, a fraction, an exponent or leading zeros are refused.
 func (a *Amount) UnmarshalJSON(b []byte) error {
+	text := strings.TrimSpace(string(b))
 	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
-		return errors.New("amount_minor must be a string of digits")
+	if strings.HasPrefix(text, `"`) {
+		if err := json.Unmarshal(b, &s); err != nil {
+			return errors.New("amount_minor must be a string of digits")
+		}
+	} else {
+		s = text
 	}
 	n, err := ParseAmount(s)
 	if err != nil {
@@ -126,7 +136,68 @@ type Envelope struct {
 	Txn            Core      `json:"txn"`
 	// Refs are external references that let evidence from other sources be matched
 	// to this transaction. Keys are RefTypes.
-	Refs map[string]string `json:"refs,omitempty"`
+	Refs Refs `json:"refs,omitempty"`
+	// InstitutionID is optional. When a source sends it, it must be the institution
+	// the source's credentials belong to; the tenant itself always comes from the
+	// credentials, never from the body.
+	InstitutionID string `json:"institution_id,omitempty"`
+	// Seq is the source's own per-transaction sequence number, when it has one.
+	Seq *int64 `json:"seq,omitempty"`
+	// RawPayloadHash identifies the message as the source sent it. It is kept as
+	// evidence and is part of the event's identity.
+	RawPayloadHash string `json:"raw_payload_hash,omitempty"`
+}
+
+// Refs are external references by type. On the wire they are a list of
+// {"type": ..., "value": ...}, as the event contract defines them. A JSON object
+// from type to value is accepted too, so earlier senders keep working. A reference
+// type given twice is refused, because it would be ambiguous which value counts.
+type Refs map[string]string
+
+type refPair struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
+}
+
+// UnmarshalJSON accepts the list form and the object form.
+func (r *Refs) UnmarshalJSON(b []byte) error {
+	trimmed := strings.TrimSpace(string(b))
+	out := Refs{}
+	switch {
+	case trimmed == "null":
+		*r = nil
+		return nil
+	case strings.HasPrefix(trimmed, "["):
+		var list []refPair
+		dec := json.NewDecoder(strings.NewReader(trimmed))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&list); err != nil {
+			return errors.New("refs must be a list of objects with type and value")
+		}
+		for _, p := range list {
+			if _, dup := out[p.Type]; dup {
+				return fmt.Errorf("refs lists %s more than once", p.Type)
+			}
+			out[p.Type] = p.Value
+		}
+	default:
+		if err := json.Unmarshal(b, (*map[string]string)(&out)); err != nil {
+			return errors.New("refs must be a list of {type, value} or an object from type to value")
+		}
+	}
+	*r = out
+	return nil
+}
+
+// MarshalJSON writes the list form, sorted by type so the same references always
+// give the same bytes.
+func (r Refs) MarshalJSON() ([]byte, error) {
+	list := make([]refPair, 0, len(r))
+	for k, v := range r {
+		list = append(list, refPair{k, v})
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].Type < list[j].Type })
+	return json.Marshal(list)
 }
 
 // RefTypes are the external reference kinds accepted.
@@ -176,6 +247,12 @@ func (e *Envelope) Validate(now time.Time) error {
 		return bad("txn.session_id contains unsupported characters")
 	case len(e.Refs) > len(RefTypes):
 		return bad("too many refs")
+	case e.InstitutionID != "" && !institutionRe.MatchString(e.InstitutionID):
+		return bad("institution_id contains unsupported characters")
+	case e.Seq != nil && (*e.Seq < 0 || *e.Seq > 1<<40):
+		return bad("seq is out of range")
+	case e.RawPayloadHash != "" && !rawHashRe.MatchString(e.RawPayloadHash):
+		return bad("raw_payload_hash must be 8 to 100 characters from A-Z a-z 0-9 : . _ -")
 	}
 	for k, v := range e.Refs {
 		if !RefTypes[k] {

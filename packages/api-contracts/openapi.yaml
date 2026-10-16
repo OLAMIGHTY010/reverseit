@@ -22,6 +22,7 @@ servers:
 tags:
   - name: Platform
   - name: Ingestion
+  - name: Detection
   - name: Transactions
   - name: Cases
   - name: Reversals
@@ -118,7 +119,9 @@ paths:
       description: |
         Called by a source system (or the simulator) with a service assertion that
         holds the `events:write` scope. The tenant comes from the service account.
-        `Idempotency-Key` must equal `source_event_ref`.
+        `Idempotency-Key` must equal `source_event_ref`. `X-Schema-Version`, if sent,
+        must be 1.x (400 UNSUPPORTED_SCHEMA_VERSION otherwise). A 409 also raises a
+        data-quality record (audit action `ingest.data_quality_conflict`).
 
         202 accepted. 200 an exact repeat (nothing changes). 409 the reference was
         reused with different content. 422 the event is invalid or contradicts the
@@ -224,6 +227,247 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /v1/rules:
+    get:
+      tags: [Detection]
+      operationId: listRules
+      summary: The latest version of every detection rule
+      description: Needs a `change_rules` grant of any scope.
+      x-status: implemented
+      responses:
+        '200':
+          description: Rules.
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/RuleVersion' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Detection]
+      operationId: createRule
+      summary: Save a new draft version of a detection rule
+      description: |
+        Needs the `draft` or `propose` scope of `change_rules`. The body is the rule
+        (see the RuleDefinition schema). It is validated: a rule with no conditions, a
+        failure-family code not guarded by `lifecycle_state eq CONFIRMED_FAILURE`, an
+        unknown-family rule about a confirmed outcome, or an unknown field is refused
+        with 422. Versions count up by one. A stored version is never edited.
+      x-status: implemented
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RuleDefinition' }
+      responses:
+        '201':
+          description: Saved as a draft.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RuleVersion' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /v1/rules/{id}:
+    get:
+      tags: [Detection]
+      operationId: getRule
+      summary: Every version of one rule, with what each concluded in shadow and in backtests
+      description: Needs a `change_rules` grant of any scope.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Versions, newest first.
+          content:
+            application/json:
+              schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/RuleVersion' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/rules/{id}/versions/{version}/shadow:
+    post:
+      tags: [Detection]
+      operationId: startRuleShadow
+      summary: Run a draft in shadow
+      description: |
+        Needs the `draft` or `propose` scope. The version is evaluated against transactions as they arrive and the results are recorded; it opens no case.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: version, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      responses:
+        '200':
+          description: The rule version.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RuleVersion' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /v1/rules/{id}/versions/{version}/backtest:
+    post:
+      tags: [Detection]
+      operationId: backtestRule
+      summary: Evaluate a draft or shadow version against recent transactions
+      description: Needs the `draft` or `propose` scope. Records results and opens no case. `limit` caps how many recent transactions are used (default 1000).
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: version, in: path, required: true, schema: { type: integer, minimum: 1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 5000 } }
+      responses:
+        '200':
+          description: Counts after the backtest.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RuleStats' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /v1/rules/{id}/versions/{version}/activation:
+    post:
+      tags: [Detection]
+      operationId: requestRuleActivation
+      summary: Ask for a shadow version to become live
+      description: |
+        Needs the `propose` scope. The version must be in shadow and have been evaluated against at least one transaction (409 otherwise).
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: version, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } }
+      responses:
+        '200':
+          description: The rule version.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RuleVersion' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /v1/rules/{id}/versions/{version}/decision:
+    post:
+      tags: [Detection]
+      operationId: decideRuleActivation
+      summary: Approve or reject a requested activation
+      description: |
+        Needs the `approve` scope and MFA. The decider must be neither the author nor the requester (403 SELF_APPROVAL). Approving retires the version that was live in the same transaction.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: version, in: path, required: true, schema: { type: integer, minimum: 1 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [approve], properties: { approve: { type: boolean }, reason: { type: string, maxLength: 500 } } }
+      responses:
+        '200':
+          description: The rule version.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RuleVersion' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /v1/rules/{id}/rollback:
+    post:
+      tags: [Detection]
+      operationId: rollbackRule
+      summary: Ask for an earlier, once-live version to become live again
+      description: |
+        Needs the `propose` scope. This is an activation request: the current version stays live until a different person approves.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [to_version, reason], properties: { to_version: { type: integer, minimum: 1 }, reason: { type: string, minLength: 5, maxLength: 500 } } }
+      responses:
+        '200':
+          description: The rule version.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RuleVersion' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /v1/rules/{id}/disable:
+    post:
+      tags: [Detection]
+      operationId: disableRule
+      summary: Take the live version out of use at once
+      description: |
+        Needs the `propose` scope and a reason. It needs no second person because it can only reduce what the rule does. It is audited. Turning the rule back on goes through rollback and approval.
+      x-status: implemented
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 5, maxLength: 500 } } }
+      responses:
+        '200':
+          description: The rule version.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RuleVersion' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /v1/pipeline:
+    get:
+      tags: [Ingestion]
+      operationId: getPipeline
+      summary: How much work is waiting in the outbox and on the Redis streams
+      description: |
+        Needs the `manage_ingestion` grant (no MFA to view). Reports measured numbers
+        and no verdict: what counts as too much backlog is for operators to decide.
+        The outbox figures are for the caller's institution. Stream figures are for
+        the shared platform. `redis_available` false means Redis was not configured or
+        did not answer, and says nothing about the streams.
+      x-status: implemented
+      responses:
+        '200':
+          description: The report.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PipelineReport' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 
   /v1/sources:
     get:
@@ -817,6 +1061,30 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /v1/review-items:
+    get:
+      tags: [Reversals]
+      operationId: listReviewItems
+      summary: Cases whose outcome is not a confirmed failure, shown beside the approval queue
+      description: |
+        Needs the `view_exception_queue` grant with `full` scope. These are cases an
+        approver or analyst should look at but that cannot be released: an unknown,
+        pending, debited-only or conflicting outcome is never reversed. Each item carries
+        the case evidence, the transaction, the reversal gate's checks, why it is
+        blocked (`blocked_because`) and what would allow a release (`release_requires`).
+        `release_allowed` is always false. A reversal request for such a case is
+        refused with 409 GATE_FAILED. Read-only. Items disappear when the case resolves
+        or a live reversal exists.
+      x-status: implemented
+      responses:
+        '200':
+          description: Review items, oldest first.
+          content:
+            application/json:
+              schema: { type: object, required: [items, simulated], properties: { simulated: { type: boolean }, items: { type: array, items: { $ref: '#/components/schemas/ReviewItem' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
   /v1/approvals:
     get:
       tags: [Reversals]
@@ -1641,16 +1909,38 @@ components:
             instruction_ref: { type: string }
             channel: { type: string, enum: [MOBILE, INTERNET, USSD, POS, ATM, CARD, GATEWAY, MERCHANT, API] }
             rail: { type: string, example: NIP }
-            amount_minor: { type: string, pattern: '^[1-9][0-9]{0,15}$', description: 'Minor units as a decimal string.', example: '1850000' }
+            amount_minor:
+              description: |
+                Minor units. A decimal string ("1850000") or a bare integer (1850000, as the
+                event contract's example shows). Both are read exactly. A sign, fraction,
+                exponent or leading zero is refused. Responses always use the string form.
+              oneOf:
+                - { type: string, pattern: '^[1-9][0-9]{0,15}$', example: '1850000' }
+                - { type: integer, minimum: 1, maximum: 9000000000000000, example: 1850000 }
             currency: { type: string, pattern: '^[A-Z]{3}$', example: NGN }
             debit_account_token: { type: string, pattern: '^acct_[0-9a-f]{32}$' }
             beneficiary_bank: { type: string }
             beneficiary_token: { type: string, pattern: '^acct_[0-9a-f]{32}$' }
             session_id: { type: string }
         refs:
-          type: object
-          description: External references for correlation. Keys are RRN, STAN, SESSION_ID, LEDGER_ID or GATEWAY_REF.
-          additionalProperties: { type: string }
+          description: |
+            External references for correlation. The contract's form is a list of
+            {type, value}; an object from type to value is accepted too. Types are RRN,
+            STAN, SESSION_ID, LEDGER_ID and GATEWAY_REF, each at most once. Written back as
+            a list sorted by type.
+          oneOf:
+            - type: array
+              items:
+                type: object
+                required: [type, value]
+                properties:
+                  type: { type: string, enum: [RRN, STAN, SESSION_ID, LEDGER_ID, GATEWAY_REF] }
+                  value: { type: string }
+            - type: object
+              additionalProperties: { type: string }
+        institution_id: { type: string, description: 'Optional. If sent it must be the institution of the sending service; the tenant always comes from the credentials. A mismatch is 422 and the event is quarantined.' }
+        seq: { type: integer, minimum: 0, description: 'Optional per-transaction sequence number from the source.' }
+        raw_payload_hash: { type: string, description: 'Optional hash of the message as the source sent it. Part of the event identity.' }
     EventAccepted:
       type: object
       required: [event_id, txn_id, lifecycle_state, duplicate]
@@ -1659,6 +1949,106 @@ components:
         txn_id: { type: string, format: uuid }
         lifecycle_state: { type: string }
         duplicate: { type: boolean }
+    ReviewItem:
+      type: object
+      required: [kind, case_id, case_ref, classification, case_status, opened_at, evidence, gate, blocked_because, release_allowed, release_requires, simulated]
+      properties:
+        kind: { type: string, enum: [REVIEW] }
+        case_id: { type: string, format: uuid }
+        case_ref: { type: string }
+        classification: { type: string }
+        case_status: { type: string }
+        opened_at: { type: string, format: date-time }
+        transaction: { type: object }
+        evidence: { type: array, items: { type: object } }
+        gate: { type: object }
+        blocked_because: { type: string }
+        release_allowed: { type: boolean, enum: [false] }
+        release_requires: { type: string }
+        degraded_sources: { type: object, additionalProperties: { type: string }, description: Sources that contributed to the transaction and are stale or down. }
+        simulated: { type: boolean }
+    RuleDefinition:
+      type: object
+      required: [rule_id, version, code, root_cause, explanation, all]
+      properties:
+        rule_id: { type: string, pattern: '^[A-Z][A-Z0-9-]{2,39}$', example: DET-ATM-2 }
+        version: { type: integer, minimum: 1 }
+        code: { type: string, enum: [FAIL001, ATM001, FEE001, VND001, MIS001, INC001, UNK001] }
+        risk: { type: string, enum: ['', LOW, MEDIUM, HIGH] }
+        root_cause: { type: string }
+        explanation: { type: string, minLength: 10, maxLength: 300 }
+        all:
+          type: array
+          maxItems: 12
+          minItems: 1
+          items:
+            type: object
+            required: [field, op, value]
+            properties:
+              field: { type: string, enum: [lifecycle_state, credit_status, debit_status, rail, channel, currency, amount_minor, event_count, seconds_since_last_event, seconds_since_first_debit] }
+              op: { type: string, enum: [eq, ne, in, not_in, gt, gte, lt, lte] }
+              value: {}
+        requires_fresh:
+          type: array
+          maxItems: 5
+          items: { type: string }
+          description: Sources that must be fresh for the rule to run; otherwise the rule is held and the reason recorded.
+    RuleStats:
+      type: object
+      required: [evaluated, matched, no_match, held]
+      properties:
+        evaluated: { type: integer }
+        matched: { type: integer }
+        no_match: { type: integer }
+        held: { type: integer }
+    RuleVersion:
+      type: object
+      required: [rule, status, created_by, created_at]
+      properties:
+        rule: { $ref: '#/components/schemas/RuleDefinition' }
+        status: { type: string, enum: [draft, shadow, pending_activation, active, retired, rejected] }
+        created_by: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        shadow_started_at: { type: string, format: date-time }
+        activation_requested_by: { type: string, format: uuid }
+        activation_reason: { type: string }
+        decided_by: { type: string, format: uuid }
+        decision_reason: { type: string }
+        activated_at: { type: string, format: date-time }
+        retired_at: { type: string, format: date-time }
+        retired_reason: { type: string }
+        shadow_and_backtest_stats: { $ref: '#/components/schemas/RuleStats' }
+    PipelineReport:
+      type: object
+      required: [outbox, redis_available, streams]
+      properties:
+        outbox:
+          type: object
+          required: [unpublished, failing, oldest_unpublished_age_secs]
+          properties:
+            unpublished: { type: integer }
+            failing: { type: integer, description: Unpublished rows that have already failed at least once. }
+            oldest_unpublished_age_secs: { type: number }
+        redis_available: { type: boolean }
+        streams:
+          type: array
+          items:
+            type: object
+            required: [name, length, dead_letters, groups]
+            properties:
+              name: { type: string }
+              length: { type: integer }
+              dead_letters: { type: integer }
+              groups:
+                type: array
+                items:
+                  type: object
+                  required: [name, consumers, pending, lag]
+                  properties:
+                    name: { type: string }
+                    consumers: { type: integer }
+                    pending: { type: integer }
+                    lag: { type: integer, nullable: true, description: Entries not yet delivered to the group; null when Redis cannot say. }
     SourceExpectation:
       type: object
       required: [stale_after_secs, down_after_secs, max_skew_secs]

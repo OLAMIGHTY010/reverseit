@@ -174,3 +174,36 @@ func TestPercentileUsesNearestRank(t *testing.T) {
 		t.Fatal("percentile sorted its input")
 	}
 }
+
+func TestDegradedListsOnlyConfiguredSourcesThatAreStaleOrDown(t *testing.T) {
+	r := newRig(t)
+	r.send("QUIET_A", t0, t0)
+	r.send("QUIET_B", t0, t0)
+	r.send("NO_EXPECTATION", t0, t0)
+	_ = r.set(Expectation{SourceSystem: "QUIET_A", StaleAfterSec: 300, DownAfterSec: 900, MaxSkewSec: 5})
+	_ = r.set(Expectation{SourceSystem: "QUIET_B", StaleAfterSec: 60, DownAfterSec: 120, MaxSkewSec: 5})
+	get := func(after time.Duration) map[string]string {
+		var out map[string]string
+		if err := r.pool.WithTenant(context.Background(), r.tenant, func(tx pgx.Tx) error {
+			var err error
+			out, err = Degraded(context.Background(), tx, r.tenant, t0.Add(after))
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	if got := get(30 * time.Second); len(got) != 0 {
+		t.Fatalf("%v", got)
+	}
+	if got := get(90 * time.Second); len(got) != 1 || got["QUIET_B"] != Stale {
+		t.Fatalf("%v", got)
+	}
+	got := get(time.Hour)
+	if len(got) != 2 || got["QUIET_A"] != Down || got["QUIET_B"] != Down {
+		t.Fatalf("%v", got)
+	}
+	if _, ok := got["NO_EXPECTATION"]; ok {
+		t.Fatal("a source with no expectation was reported as degraded")
+	}
+}

@@ -10,6 +10,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/smartreversal/smartreversal/apps/api/internal/audit"
 	"github.com/smartreversal/smartreversal/apps/api/internal/authz"
 	"github.com/smartreversal/smartreversal/apps/api/internal/cases"
@@ -23,6 +25,7 @@ import (
 	"github.com/smartreversal/smartreversal/apps/api/internal/observability"
 	"github.com/smartreversal/smartreversal/apps/api/internal/platform/db"
 	"github.com/smartreversal/smartreversal/apps/api/internal/reversal"
+	"github.com/smartreversal/smartreversal/apps/api/internal/rules"
 	"github.com/smartreversal/smartreversal/apps/api/internal/servauth"
 	"github.com/smartreversal/smartreversal/apps/api/internal/server"
 	"github.com/smartreversal/smartreversal/apps/api/internal/txn"
@@ -63,6 +66,11 @@ func run() error {
 		return err
 	}
 	defer pool.Close()
+
+	// The pipeline report reads stream backlog. The client connects lazily, so an
+	// unreachable Redis does not stop the API; the report says it is unavailable.
+	redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr(), Password: cfg.RedisPassword, DB: cfg.RedisDB})
+	defer redisClient.Close()
 
 	signer, verifier, err := identity.Load(cfg.JWTKeyID, cfg.JWTPrivateKey, cfg.JWTPublicKeys, cfg.JWTTokenTTL)
 	if err != nil {
@@ -110,7 +118,7 @@ func run() error {
 			Signer:   signer,
 			Observer: &identity.AuditLoginObserver{Pool: pool, Appender: appender, Logger: logger},
 		},
-		Services:        &server.Services{Pool: pool, Policy: policy, Audit: appender, Vault: vault, Config: configService, KillSwitch: killService, Txn: txnService, Feed: &feed.Importer{Pool: pool, Txn: txnService}, Correlate: &correlate.Matcher{Txn: txnService}, Cases: caseService, Reversal: reversalService},
+		Services:        &server.Services{Pool: pool, Policy: policy, Audit: appender, Vault: vault, Config: configService, KillSwitch: killService, Txn: txnService, Feed: &feed.Importer{Pool: pool, Txn: txnService}, Redis: redisClient, Rules: &rules.Engine{Store: &rules.Store{Audit: appender}}, Correlate: &correlate.Matcher{Txn: txnService}, Cases: caseService, Reversal: reversalService},
 		ServiceVerifier: &servauth.Verifier{Pool: pool},
 	})
 	return server.Serve(ctx, ln, handler, logger, server.Timeouts{

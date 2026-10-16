@@ -13,8 +13,24 @@ paths = [
 ]
 
 [[allowlists]]
+description = "Synthetic account token (acct_ plus 32 hex digits, not a real credential) in an event fixture of a worker integration test"
+targetRules = ["generic-api-key"]
+paths = [
+  '''apps/api/internal/worker/worker_test\.go''',
+]
+
+[[allowlists]]
 description = "Mock idempotency keys in the synthetic simulator data of the web app"
 targetRules = ["generic-api-key"]
 paths = [
   '''apps/web/src/services/mockSimulatorData\.ts''',
+]
+
+[[allowlists]]
+description = "The made-up account tokens used as fixture values in tests (acct_ plus a fixed 32 digit pattern). They are not credentials"
+targetRules = ["generic-api-key"]
+regexes = [
+  '''acct_0123456789abcdef0123456789abcdef''',
+  '''acct_fedcba9876543210fedcba9876543210''',
+  '''7c1e[0-9a-f]{4,}''',
 ]

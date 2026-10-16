@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/smartreversal/smartreversal/apps/api/internal/detect"
+	"github.com/smartreversal/smartreversal/apps/api/internal/inbound"
 	"github.com/smartreversal/smartreversal/apps/api/internal/outbox"
 	"github.com/smartreversal/smartreversal/apps/api/internal/platform/db"
 	"github.com/smartreversal/smartreversal/apps/api/internal/platform/redisx"
@@ -42,6 +43,8 @@ type Deps struct {
 	// Reversal, when set, makes each sweep also run the simulated reversal
 	// automation and advance reversals still in flight.
 	Reversal *reversal.Service
+	// Inbound, when set, consumes the inbound events stream that sources write to.
+	Inbound *inbound.Handler
 }
 
 // Run starts every background task and blocks until ctx is cancelled or one
@@ -65,13 +68,19 @@ func Run(ctx context.Context, d Deps) error {
 	})
 
 	tasks := 2
-	errc := make(chan error, 4)
+	errc := make(chan error, 5)
 	if d.Detector != nil {
 		tasks += 2
 		consumer := &stream.Consumer{Pool: d.Pool, Redis: d.Redis.Client, Logger: d.Logger,
 			Stream: txn.Stream, Group: "detector", Name: "worker-1", Handler: d.Detector.Handle}
 		go func() { errc <- consumer.Run(ctx) }()
 		go func() { errc <- sweepLoop(ctx, d) }()
+	}
+	if d.Inbound != nil {
+		tasks++
+		consumer := &stream.Consumer{Pool: d.Pool, Redis: d.Redis.Client, Logger: d.Logger,
+			Stream: inbound.Stream, Group: inbound.Group, Name: "worker-1", Handler: d.Inbound.Handle}
+		go func() { errc <- consumer.Run(ctx) }()
 	}
 	go func() {
 		errc <- server.Serve(ctx, d.HealthListener, health, d.Logger, d.Timeouts)

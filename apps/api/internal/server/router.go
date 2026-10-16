@@ -96,11 +96,23 @@ func NewRouter(o Options) http.Handler {
 				if o.Services.Txn != nil {
 					pr.Get("/transactions", o.Services.listTransactions)
 					pr.Get("/transactions/{id}", o.Services.getTransaction)
+					pr.Get("/pipeline", o.Services.getPipeline)
 					pr.Get("/sources", o.Services.listSources)
 					pr.Put("/sources/{system}/expectation", o.Services.setSourceExpectation)
 					pr.Get("/quarantine", o.Services.listQuarantine)
 					pr.Post("/quarantine/{id}/replay", o.Services.replayQuarantine)
 					pr.Post("/quarantine/{id}/discard", o.Services.discardQuarantine)
+				}
+				if o.Services.Rules != nil {
+					pr.Get("/rules", o.Services.listRules)
+					pr.Post("/rules", o.Services.createRule)
+					pr.Get("/rules/{id}", o.Services.getRule)
+					pr.Post("/rules/{id}/rollback", o.Services.rollbackRule)
+					pr.Post("/rules/{id}/disable", o.Services.disableRule)
+					pr.Post("/rules/{id}/versions/{version}/shadow", o.Services.startRuleShadow)
+					pr.Post("/rules/{id}/versions/{version}/backtest", o.Services.backtestRule)
+					pr.Post("/rules/{id}/versions/{version}/activation", o.Services.requestRuleActivation)
+					pr.Post("/rules/{id}/versions/{version}/decision", o.Services.decideRuleActivation)
 				}
 				if o.Services.Correlate != nil {
 					pr.Get("/evidence", o.Services.listEvidence)
@@ -123,6 +135,7 @@ func NewRouter(o Options) http.Handler {
 					pr.Post("/reversals/{id}/reapproval", o.Services.requestReapproval)
 					pr.Get("/cases/{id}/reversal-eligibility", o.Services.reversalEligibility)
 					pr.Get("/approvals", o.Services.listApprovals)
+					pr.Get("/review-items", o.Services.listReviewItems)
 					pr.Post("/approvals/{id}/decision", o.Services.decideApproval)
 					pr.Get("/reconciliation/reversals", o.Services.reconcileReversals)
 					pr.Get("/reports/summary", o.Services.summaryReport)

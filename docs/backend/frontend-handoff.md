@@ -102,3 +102,7 @@ Case numbers are `000001` to `000003` on a fresh database. After `demo play` is 
 ## 6. What is real and what is not
 
 See `docs/backend/known-limitations.md`. In particular: no customer sign-in (operators and agents only), simulated status/ledger/provider/notifications, synthetic unverified policy, development-only TOTP, and nothing is production-hardened.
+
+## Review items for unknown outcomes (new)
+
+`GET /v1/review-items` lists open cases whose outcome is not a confirmed failure (unknown, pending, debited only, conflicting). Show them in the approval queue with the label REVIEW. Each item has the evidence, the transaction, the reversal gate's checks, `blocked_because`, `release_requires` and `release_allowed: false`. Disable the Release action for these items. Asking for a reversal anyway returns `409 GATE_FAILED`. The scope document also describes a dual-approver override with a reason and fresh evidence; the backend does not offer it for unknown outcomes. It is the safer reading and a product decision for the bank. Needs the full exception-queue scope, so agents and executives get 403. Additive: the existing `/v1/approvals` response is unchanged.

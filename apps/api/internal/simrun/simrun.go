@@ -22,6 +22,7 @@ import (
 	"github.com/smartreversal/smartreversal/apps/api/internal/detect"
 	"github.com/smartreversal/smartreversal/apps/api/internal/platform/db"
 	"github.com/smartreversal/smartreversal/apps/api/internal/sim"
+	"github.com/smartreversal/smartreversal/apps/api/internal/sources"
 	"github.com/smartreversal/smartreversal/apps/api/internal/txn"
 )
 
@@ -92,6 +93,9 @@ type Options struct {
 	SweepEvery time.Duration
 	// Settle is how long after the last event the sweep keeps running.
 	Settle time.Duration
+	// Expectations are set for a source as soon as it has sent its first event,
+	// because an expectation can only be set for a source that has spoken.
+	Expectations map[string]sources.Expectation
 }
 
 func (o *Options) defaults() {
@@ -124,6 +128,7 @@ func (h *Harness) Play(ctx context.Context, run sim.Run, o Options) error {
 	if len(run.Events) > 0 {
 		last = run.Events[0].Arrive.Add(-time.Second)
 	}
+	expected := map[string]bool{}
 	for _, e := range run.Events {
 		if err := sweepTo(e.Arrive); err != nil {
 			return err
@@ -141,6 +146,14 @@ func (h *Harness) Play(ctx context.Context, run sim.Run, o Options) error {
 			return fmt.Errorf("simrun: %s: %w", e.Envelope.SourceEventRef, err)
 		}
 		last = e.Arrive
+		if x, ok := o.Expectations[e.Envelope.SourceSystem]; ok && !expected[e.Envelope.SourceSystem] {
+			if err := h.Pool.WithTenant(ctx, h.Tenant, func(tx pgx.Tx) error {
+				return sources.Set(ctx, tx, h.Tenant, uuid.New(), x)
+			}); err != nil {
+				return fmt.Errorf("simrun: expectation for %s: %w", x.SourceSystem, err)
+			}
+			expected[e.Envelope.SourceSystem] = true
+		}
 	}
 	if len(run.Events) > 0 {
 		return sweepTo(run.Events[len(run.Events)-1].Arrive.Add(o.Settle))

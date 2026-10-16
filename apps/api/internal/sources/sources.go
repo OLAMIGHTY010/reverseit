@@ -192,3 +192,38 @@ func absf(x float64) float64 {
 	}
 	return x
 }
+
+// Degraded returns the sources that have an expectation and are stale or down at
+// now, mapped to "stale" or "down". A source with no expectation is not in the map:
+// the platform does not assume a threshold, so for callers that must not change
+// behaviour until someone has set one, it is simply not reported as degraded. Use
+// Report to see unconfigured sources.
+func Degraded(ctx context.Context, tx pgx.Tx, tenant uuid.UUID, now time.Time) (map[string]string, error) {
+	rows, err := tx.Query(ctx, `SELECT x.source_system, x.stale_after_secs, x.down_after_secs,
+			(SELECT max(e.received_at) FROM transaction_events e WHERE e.tenant_id = x.tenant_id AND e.source_system = x.source_system)
+		FROM source_expectations x WHERE x.tenant_id = $1`, tenant)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var src string
+		var stale, down int
+		var last *time.Time
+		if err := rows.Scan(&src, &stale, &down, &last); err != nil {
+			return nil, err
+		}
+		if last == nil {
+			continue // an expectation for a source that has sent nothing yet: nothing to be silent about
+		}
+		silence := int64(now.Sub(*last).Seconds())
+		switch {
+		case silence >= int64(down):
+			out[src] = Down
+		case silence >= int64(stale):
+			out[src] = Stale
+		}
+	}
+	return out, rows.Err()
+}

@@ -135,3 +135,14 @@ func TestLabelsDescribeWhatTheDomainRequires(t *testing.T) {
 	}
 	_ = by
 }
+
+func TestTheFiftyTransactionRunSpansSeveralChannels(t *testing.T) {
+	r, _ := Demo50(2026, time.Time{})
+	seen := map[string]bool{}
+	for _, e := range r.Events {
+		seen[e.Envelope.Txn.Channel] = true
+	}
+	if len(seen) < 5 {
+		t.Fatalf("only %d channels: %v", len(seen), seen)
+	}
+}

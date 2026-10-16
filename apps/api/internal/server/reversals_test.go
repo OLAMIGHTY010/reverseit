@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -382,5 +383,66 @@ func TestAnApprovalThatLapsesWhileFrozenNeedsAFreshOneThroughTheAPI(t *testing.T
 	done := decode(t, out)
 	if code != 200 || done["tracks"].(map[string]any)["financial"] != "VERIFIED" || done["id"] != id {
 		t.Fatalf("%d %s", code, out)
+	}
+}
+
+func TestAnUnknownOutcomeAppearsInTheReviewQueueWithEvidenceAndCannotBeReleased(t *testing.T) {
+	r := newRevRig(t)
+	at := time.Now().Add(-40 * time.Minute) // well apart from the other transfer, so they are not a duplicate pair
+	r.event(t, "REF-RV1", "DEBIT_POSTED", at)
+	r.event(t, "REF-RV1", "TRANSFER_SENT", at.Add(time.Second))
+	id := r.event(t, "REF-RV1", "TRANSFER_RESPONSE_TIMEOUT", at.Add(30*time.Second))
+	var c cases.Case
+	if err := r.pool.WithTenant(context.Background(), r.tenant, func(tx pgx.Tx) error {
+		fs, err := r.det.Evaluate(context.Background(), tx, r.tenant, id)
+		if err == nil && len(fs) == 1 {
+			c = fs[0].Case
+		}
+		return err
+	}); err != nil || c.Classification != "UNK001" {
+		t.Fatalf("%v %+v", err, c)
+	}
+	// A confirmed failure on another transfer is an approval, not a review item.
+	_, failedCase := r.failed(t, "REF-RV2")
+
+	supervisor := r.as(t, "SUPERVISOR")
+	code, out := r.call("GET", "/v1/review-items", supervisor, "")
+	if code != 200 {
+		t.Fatalf("%d %s", code, out)
+	}
+	var list struct {
+		Items []reviewItemJSON `json:"items"`
+	}
+	_ = json.Unmarshal(out, &list)
+	var found *reviewItemJSON
+	for i := range list.Items {
+		if list.Items[i].CaseID == failedCase.ID.String() {
+			t.Fatalf("a confirmed failure was listed as a review item: %+v", list.Items[i])
+		}
+		if list.Items[i].CaseID == c.ID.String() {
+			found = &list.Items[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("the unknown case is not in the review queue: %s", out)
+	}
+	if found.Kind != "REVIEW" || found.ReleaseAllowed || found.Classification != "UNK001" || len(found.Evidence) == 0 || found.Transaction == nil ||
+		found.Transaction.LifecycleState != "UNKNOWN" || !strings.Contains(found.BlockedBecause, "UNKNOWN") || found.Gate.Verdict != reversal.Blocked || !found.Simulated {
+		t.Fatalf("%+v", found)
+	}
+	// It cannot be released: asking for a reversal is refused by the gate.
+	code, out = r.call("POST", "/v1/reversals", r.as(t, "REVERSAL_OFFICER"), `{"case_id":"`+c.ID.String()+`","reason_code":"CONFIRMED_FAILED_CREDIT"}`, "Idempotency-Key", "k-review")
+	if code != http.StatusConflict || decode(t, out)["error"] != "GATE_FAILED" {
+		t.Fatalf("an unknown outcome was released: %d %s", code, out)
+	}
+	// Only roles with the full queue scope see review items.
+	if code, _ := r.call("GET", "/v1/review-items", r.as(t, "AGENT"), ""); code != http.StatusForbidden {
+		t.Fatalf("agent: %d", code)
+	}
+	if code, _ := r.call("GET", "/v1/review-items", r.as(t, "EXECUTIVE"), ""); code != http.StatusForbidden {
+		t.Fatalf("executive: %d", code)
+	}
+	if code, _ := r.call("GET", "/v1/review-items", "", ""); code != http.StatusUnauthorized {
+		t.Fatalf("anonymous: %d", code)
 	}
 }

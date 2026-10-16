@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/smartreversal/smartreversal/apps/api/internal/audit"
 	"github.com/smartreversal/smartreversal/apps/api/internal/authz"
@@ -20,6 +21,7 @@ import (
 	"github.com/smartreversal/smartreversal/apps/api/internal/feed"
 	"github.com/smartreversal/smartreversal/apps/api/internal/identity"
 	"github.com/smartreversal/smartreversal/apps/api/internal/platform/dbtest"
+	"github.com/smartreversal/smartreversal/apps/api/internal/rules"
 	"github.com/smartreversal/smartreversal/apps/api/internal/servauth"
 	"github.com/smartreversal/smartreversal/apps/api/internal/txn"
 )
@@ -60,7 +62,7 @@ func newIngestRig(t *testing.T) *ingestRig {
 	r.auditRig = &auditRig{pool: pool, signer: signer, tenant: tenant, appender: app,
 		handler: NewRouter(Options{Logger: logger, Verifier: identity.NewVerifier(ks, nil),
 			ServiceVerifier: &servauth.Verifier{Pool: pool},
-			Services:        &Services{Pool: pool, Policy: policy, Audit: app, Txn: &txn.Service{}, Feed: &feed.Importer{Pool: pool, Txn: &txn.Service{}}, Correlate: &correlate.Matcher{Txn: &txn.Service{}}}})}
+			Services:        &Services{Pool: pool, Policy: policy, Audit: app, Txn: &txn.Service{}, Feed: &feed.Importer{Pool: pool, Txn: &txn.Service{}}, Correlate: &correlate.Matcher{Txn: &txn.Service{}}, Rules: &rules.Engine{Store: &rules.Store{Audit: app}}}})}
 	return r
 }
 
@@ -135,7 +137,7 @@ func TestEventEndpointValidation(t *testing.T) {
 	raw := ev("INS-100002", "DEBIT_POSTED", "EV-200001", now)
 	raw["txn"].(map[string]any)["debit_account_token"] = "0123456789"
 	numeric := ev("INS-100002", "DEBIT_POSTED", "EV-200002", now)
-	numeric["txn"].(map[string]any)["amount_minor"] = 1850000
+	numeric["txn"].(map[string]any)["amount_minor"] = 18500.5 // a fraction is never an amount in minor units
 	extra := ev("INS-100002", "DEBIT_POSTED", "EV-200003", now)
 	extra["admin"] = true
 	badType := ev("INS-100002", "MONEY_APPEARED", "EV-200004", now)
@@ -146,7 +148,7 @@ func TestEventEndpointValidation(t *testing.T) {
 		want int
 	}{
 		"a raw account number":       {"EV-200001", raw, http.StatusUnprocessableEntity},
-		"amount as a JSON number":    {"EV-200002", numeric, http.StatusUnprocessableEntity},
+		"amount with a fraction":     {"EV-200002", numeric, http.StatusUnprocessableEntity},
 		"an unknown field":           {"EV-200003", extra, http.StatusUnprocessableEntity},
 		"an unknown event type":      {"EV-200004", badType, http.StatusUnprocessableEntity},
 		"not JSON":                   {"EV-200005", "nope", http.StatusUnprocessableEntity},
@@ -281,5 +283,80 @@ func TestTransactionsAreListedAndFetchedByOperatorsOnly(t *testing.T) {
 	}
 	if rec := get("/v1/transactions?cursor=zzz", tok); rec.Code != http.StatusBadRequest {
 		t.Errorf("bad cursor: %d", rec.Code)
+	}
+}
+
+// The event exactly as the contract's example shows it: a list of refs, a bare
+// integer amount, institution_id and raw_payload_hash, and the schema header.
+func TestTheContractExampleEventIsAcceptedAsWritten(t *testing.T) {
+	r := newIngestRig(t)
+	var code string
+	if err := r.pool.QueryRow(t.Context(), `SELECT code FROM institutions WHERE id = $1`, r.tenant).Scan(&code); err != nil {
+		t.Fatal(err)
+	}
+	body := `{"institution_id":"` + code + `","source_system":"SWITCH_A","source_event_ref":"SW-20261014-000184233","event_type":"TRANSFER_RESPONSE_TIMEOUT",
+	 "source_ts":"` + time.Now().Add(-time.Minute).UTC().Format(time.RFC3339) + `","seq":3,
+	 "txn":{"instruction_ref":"NIP-DEMO-7781002","channel":"MOBILE","rail":"NIP","amount_minor":1850000,"currency":"NGN","debit_account_token":"` + tokA + `"},
+	 "refs":[{"type":"SESSION_ID","value":"DEMO0000000000000000SESSION01"}],"raw_payload_hash":"sha256:7c1e0000aaaa"}`
+	post := func(body, version string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/v1/events", strings.NewReader(body))
+		req.Header.Set("Idempotency-Key", "SW-20261014-000184233")
+		if version != "" {
+			req.Header.Set("X-Schema-Version", version)
+		}
+		a, _ := servauth.NewAssertion(r.tenant, r.svcID, r.svcKey, time.Now(), time.Minute)
+		req.Header.Set("Authorization", "Bearer "+a)
+		rec := httptest.NewRecorder()
+		r.handler.ServeHTTP(rec, req)
+		return rec
+	}
+	if rec := post(body, "1.2"); rec.Code != http.StatusAccepted {
+		t.Fatalf("%d %s", rec.Code, rec.Body.String())
+	}
+	if rec := post(body, "1.2"); rec.Code != http.StatusOK {
+		t.Fatalf("repeat: %d %s", rec.Code, rec.Body.String())
+	}
+	var sess string
+	_ = r.pool.WithTenant(t.Context(), r.tenant, func(tx pgx.Tx) error {
+		return tx.QueryRow(t.Context(), `SELECT ref_value FROM transaction_refs WHERE ref_type = 'SESSION_ID' LIMIT 1`).Scan(&sess)
+	})
+	if sess != "DEMO0000000000000000SESSION01" {
+		t.Fatalf("the reference list was not stored: %q", sess)
+	}
+
+	// A body for a different institution is refused and kept for review.
+	wrong := strings.Replace(body, `"institution_id":"`+code+`"`, `"institution_id":"SOMEONE-ELSE"`, 1)
+	wrong = strings.Replace(wrong, "SW-20261014-000184233", "SW-20261014-000184234", 1)
+	req := httptest.NewRequest(http.MethodPost, "/v1/events", strings.NewReader(wrong))
+	req.Header.Set("Idempotency-Key", "SW-20261014-000184234")
+	a, _ := servauth.NewAssertion(r.tenant, r.svcID, r.svcKey, time.Now(), time.Minute)
+	req.Header.Set("Authorization", "Bearer "+a)
+	rec := httptest.NewRecorder()
+	r.handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("another institution's id: %d %s", rec.Code, rec.Body.String())
+	}
+	var q int
+	_ = r.pool.QueryRow(t.Context(), `SELECT count(*) FROM quarantined_events WHERE tenant_id = $1 AND payload IS NOT NULL`, r.tenant).Scan(&q)
+	if q != 1 {
+		t.Fatalf("%d quarantined", q)
+	}
+
+	// An unsupported schema version is refused before anything is read.
+	for _, v := range []string{"2.0", "1", "1.x", "abc"} {
+		if rec := post(body, v); rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "UNSUPPORTED_SCHEMA_VERSION") {
+			t.Errorf("version %q: %d %s", v, rec.Code, rec.Body.String())
+		}
+	}
+
+	// The same reference with different content is a conflict and raises a data-quality record.
+	changed := strings.Replace(body, `"amount_minor":1850000`, `"amount_minor":1850001`, 1)
+	if rec := post(changed, "1.2"); rec.Code != http.StatusConflict {
+		t.Fatalf("conflict: %d %s", rec.Code, rec.Body.String())
+	}
+	var alerts int
+	_ = r.pool.QueryRow(t.Context(), `SELECT count(*) FROM audit_events WHERE tenant_id = $1 AND action = 'ingest.data_quality_conflict'`, r.tenant).Scan(&alerts)
+	if alerts != 1 {
+		t.Fatalf("%d data-quality records", alerts)
 	}
 }

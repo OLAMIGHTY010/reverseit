@@ -85,6 +85,14 @@ func (g *gen) hex(n int) string {
 	return hex.EncodeToString(b)
 }
 
+// channel picks the channel for a transfer whose outcome does not depend on it. The
+// detector classifies some failures by channel (USSD and gateway failures as vendor
+// drops, for example), so scenarios about failures keep a fixed channel and the others
+// vary, which exercises every channel the platform accepts without changing any label.
+func (g *gen) channel() string {
+	return []string{"MOBILE", "INTERNET", "USSD", "POS", "CARD"}[g.rng.UintN(5)]
+}
+
 func (g *gen) token() string { return "acct_" + g.hex(16) }
 
 // amount is between 1,000.00 and 50,000.00 in minor units.
@@ -153,12 +161,12 @@ func (t *tx) begin() *tx {
 // Scenarios is the catalogue, in a stable order.
 var Scenarios = []Scenario{
 	{"normal_success", "debit, sent, credit confirmed within seconds", func(g *gen) {
-		t := g.newTx("normal_success", "NIP", "MOBILE", g.next())
+		t := g.newTx("normal_success", "NIP", g.channel(), g.next())
 		t.begin().emit(SrcSwitch, txn.EvCreditConfirmed, s(3))
 		t.label(txn.StateConfirmedSuccess, "a confirmed credit is a success; nothing to raise")
 	}},
 	{"slow_success", "credit confirmed after two minutes, inside the waiting threshold", func(g *gen) {
-		t := g.newTx("slow_success", "NIP", "MOBILE", g.next())
+		t := g.newTx("slow_success", "NIP", g.channel(), g.next())
 		t.begin().emit(SrcSwitch, txn.EvCreditConfirmed, s(120))
 		t.label(txn.StateConfirmedSuccess, "slow is not stuck: the answer arrived before the waiting threshold")
 	}},
@@ -168,12 +176,12 @@ var Scenarios = []Scenario{
 		t.label(txn.StateConfirmedFailure, "money left the customer and the credit failed", "FAIL001")
 	}},
 	{"switch_timeout", "debit posted, the switch never answered", func(g *gen) {
-		t := g.newTx("switch_timeout", "NIP", "MOBILE", g.next())
+		t := g.newTx("switch_timeout", "NIP", g.channel(), g.next())
 		t.begin().emit(SrcSwitch, txn.EvTransferTimeout, s(30))
 		t.label(txn.StateUnknown, "a timeout is unknown, never a confirmed failure", "UNK001")
 	}},
 	{"timeout_then_late_success", "timeout, then the credit is confirmed ten minutes later", func(g *gen) {
-		t := g.newTx("timeout_then_late_success", "NIP", "MOBILE", g.next())
+		t := g.newTx("timeout_then_late_success", "NIP", g.channel(), g.next())
 		t.begin().emit(SrcSwitch, txn.EvTransferTimeout, s(30)).emit(SrcSwitch, txn.EvCreditConfirmed, m(10))
 		t.label(txn.StateConfirmedSuccess, "the late confirmation shows it succeeded; the unknown case is raised and then closed", "UNK001")
 	}},
@@ -183,7 +191,7 @@ var Scenarios = []Scenario{
 		t.label(txn.StateConfirmedFailure, "the later failure settles it", "UNK001", "FAIL001")
 	}},
 	{"duplicate_debit", "the same payer, payee and amount debited twice within seconds", func(g *gen) {
-		a := g.newTx("duplicate_debit", "NIP", "MOBILE", g.next())
+		a := g.newTx("duplicate_debit", "NIP", g.channel(), g.next())
 		a.begin().emit(SrcSwitch, txn.EvCreditConfirmed, s(3))
 		a.label(txn.StateConfirmedSuccess, "the first debit is legitimate")
 		b := a.clone(a.at.Add(s(6)))
@@ -199,7 +207,7 @@ var Scenarios = []Scenario{
 		b.label(txn.StateConfirmedSuccess, "a retry after a confirmed failure is not a duplicate")
 	}},
 	{"repeat_outside_window", "the same payer, payee and amount ten minutes apart", func(g *gen) {
-		a := g.newTx("repeat_outside_window", "NIP", "MOBILE", g.next())
+		a := g.newTx("repeat_outside_window", "NIP", g.channel(), g.next())
 		a.begin().emit(SrcSwitch, txn.EvCreditConfirmed, s(3))
 		a.label(txn.StateConfirmedSuccess, "ordinary payment")
 		b := a.clone(a.at.Add(m(10)))
@@ -207,7 +215,7 @@ var Scenarios = []Scenario{
 		b.label(txn.StateConfirmedSuccess, "a repeat well outside the duplicate window is a legitimate repeat payment")
 	}},
 	{"same_amount_other_payee", "the same payer and amount to two different payees seconds apart", func(g *gen) {
-		a := g.newTx("same_amount_other_payee", "NIP", "MOBILE", g.next())
+		a := g.newTx("same_amount_other_payee", "NIP", g.channel(), g.next())
 		a.begin().emit(SrcSwitch, txn.EvCreditConfirmed, s(3))
 		a.label(txn.StateConfirmedSuccess, "ordinary payment")
 		b := a.clone(a.at.Add(s(6)))
@@ -216,7 +224,7 @@ var Scenarios = []Scenario{
 		b.label(txn.StateConfirmedSuccess, "a different beneficiary means a different payment, not a duplicate")
 	}},
 	{"conflicting_evidence", "one source confirms the credit and another reports it failed", func(g *gen) {
-		t := g.newTx("conflicting_evidence", "NIP", "MOBILE", g.next())
+		t := g.newTx("conflicting_evidence", "NIP", g.channel(), g.next())
 		t.begin().emit(SrcSwitch, txn.EvCreditConfirmed, s(3)).emit(SrcOther, txn.EvCreditFailed, s(5))
 		t.label(txn.StateConflicting, "sources disagree; that is raised as unknown and never resolved by guessing", "UNK001")
 	}},

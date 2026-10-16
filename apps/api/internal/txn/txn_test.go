@@ -41,7 +41,15 @@ func TestAmountIsADecimalStringOfMinorUnits(t *testing.T) {
 	if b, _ := json.Marshal(Amount(42)); string(b) != `"42"` {
 		t.Fatalf("marshal: %s", b)
 	}
-	for _, bad := range []string{`1850000`, `"1850.00"`, `"-5"`, `"+5"`, `"0"`, `"007"`, `""`, `"1e6"`, `" 5"`, `"99999999999999999"`, `"9000000000000001"`, `null`, `true`} {
+	var bare Amount
+	if err := json.Unmarshal([]byte(`1850000`), &bare); err != nil || bare != 1850000 {
+		t.Fatalf("a bare integer, as the event contract shows, must be read exactly: %v %v", bare, err)
+	}
+	var big Amount
+	if err := json.Unmarshal([]byte(`9000000000000000`), &big); err != nil || big != Amount(MaxAmountMinor) {
+		t.Fatalf("a bare integer above 2^53 must stay exact: %v %v", big, err)
+	}
+	for _, bad := range []string{`1850000.5`, `1850000.0`, `1e6`, `+5`, `-5`, `007`, `"1850.00"`, `"-5"`, `"+5"`, `"0"`, `"007"`, `""`, `"1e6"`, `" 5"`, `"99999999999999999"`, `"9000000000000001"`, `null`, `true`} {
 		var x Amount
 		if err := json.Unmarshal([]byte(bad), &x); err == nil {
 			t.Errorf("%s accepted as %d", bad, x)
@@ -507,5 +515,61 @@ func TestTheSameEventDeliveredConcurrentlyIsStoredOnceAndReportedAsADuplicate(t 
 	}
 	if _, _, n := r.row(t, "INS-R003"); n != 1 || r.outboxCount(t) != 1 {
 		t.Fatalf("events=%d outbox=%d", n, r.outboxCount(t))
+	}
+}
+
+func TestRefsAreReadAsAListOrAnObjectAndAlwaysWrittenAsASortedList(t *testing.T) {
+	var list, obj Envelope
+	base := `{"source_system":"SWITCH_A","source_event_ref":"EV-R100","event_type":"DEBIT_POSTED","source_ts":"2026-10-15T09:00:00Z","txn":{"instruction_ref":"INS-R100","channel":"MOBILE","rail":"NIP","amount_minor":1850000,"currency":"NGN","debit_account_token":"acct_0123456789abcdef0123456789abcdef"},"refs":`
+	if err := json.Unmarshal([]byte(base+`[{"type":"STAN","value":"000123"},{"type":"RRN","value":"RRN000000123"}]}`), &list); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(base+`{"RRN":"RRN000000123","STAN":"000123"}}`), &obj); err != nil {
+		t.Fatal(err)
+	}
+	if list.Hash() != obj.Hash() {
+		t.Fatal("the same references hashed differently by form")
+	}
+	out, _ := json.Marshal(list)
+	if !strings.Contains(string(out), `"refs":[{"type":"RRN","value":"RRN000000123"},{"type":"STAN","value":"000123"}]`) {
+		t.Fatalf("not a sorted list: %s", out)
+	}
+	for name, doc := range map[string]string{
+		"type given twice": `[{"type":"RRN","value":"A1"},{"type":"RRN","value":"B2"}]`,
+		"unknown key":      `[{"type":"RRN","value":"A1","x":1}]`,
+		"a string":         `"RRN"`,
+		"a number":         `5`,
+	} {
+		var e Envelope
+		if err := json.Unmarshal([]byte(base+doc+`}`), &e); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+}
+
+func TestOptionalContractFieldsAreValidated(t *testing.T) {
+	good := env("INS-C001", EvDebitPosted, "EV-C001", t0)
+	seq := int64(7)
+	good.Seq, good.InstitutionID, good.RawPayloadHash = &seq, "INST-DEMO-01", "sha256:7c1e0000"
+	if err := good.Validate(t0); err != nil {
+		t.Fatal(err)
+	}
+	neg := int64(-1)
+	for name, mut := range map[string]func(*Envelope){
+		"negative seq":    func(e *Envelope) { e.Seq = &neg },
+		"odd institution": func(e *Envelope) { e.InstitutionID = "a b" },
+		"short raw hash":  func(e *Envelope) { e.RawPayloadHash = "abc" },
+		"odd raw hash":    func(e *Envelope) { e.RawPayloadHash = "sha256:7c1e 0000" },
+	} {
+		e := good
+		mut(&e)
+		if err := e.Validate(t0); !errors.Is(err, ErrInvalid) {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	other := good
+	other.RawPayloadHash = "sha256:aaaa0000"
+	if good.Hash() == other.Hash() {
+		t.Fatal("a different raw payload hash is a different event")
 	}
 }
