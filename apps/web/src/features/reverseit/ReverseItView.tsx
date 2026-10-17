@@ -10,6 +10,7 @@ import { S7ReviewSend } from './S7ReviewSend';
 import { S8CaseTracker } from './S8CaseTracker';
 import { S9EscalationLadder } from './S9EscalationLadder';
 import { MyCasesView } from './MyCasesView';
+import { VoiceDisputeModal } from './voice/VoiceDisputeModal';
 import {
   INITIAL_CUSTOMER_CASES,
   REGULATORY_CLOCKS,
@@ -32,6 +33,7 @@ export const ReverseItView: React.FC = () => {
   const { addToast } = useApp();
 
   const [currentStep, setCurrentStep] = useState<ReverseItStep>('S1_REPORT_PROBLEM');
+  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [intakeMode, setIntakeMode] = useState<IntakeMode>('PASTE_TEXT');
   const [parsedDetails, setParsedDetails] = useState<ParsedAlertDetails>(
     SAMPLE_NIGERIAN_ALERTS[0].parsed
@@ -274,6 +276,147 @@ export const ReverseItView: React.FC = () => {
     }
   };
 
+  // Voice Dispute Lodgement Handler
+  const handleVoiceDisputeCreated = (data: {
+    reference: string;
+    channel: string;
+    amount: number;
+    currency: string;
+    accountNumber: string;
+    description: string;
+    language: string;
+  }) => {
+    const trackingId = `TRK-VOICE-${Math.floor(100000 + Math.random() * 900000)}`;
+    const newCase: CustomerDisputeCase = {
+      id: `case-voice-${Date.now()}`,
+      caseNumber: data.reference,
+      trackingId,
+      customerName: 'Verified Account Holder',
+      maskedAccount: data.accountNumber.length > 4 ? `•••• ${data.accountNumber.slice(-4)}` : '•••• 9901',
+      amount: data.amount.toLocaleString('en-US', { minimumFractionDigits: 2 }),
+      currency: data.currency,
+      disputeType: 'atm_failure',
+      disputeLabel: 'VOICE LODGEMENT DISPUTE',
+      channel: data.channel,
+      reference: data.reference,
+      narration: data.description,
+      reportedAt: new Date().toISOString(),
+      regulatoryDeadline: new Date(Date.now() + 24 * 3600000).toISOString(),
+      bankTargetDeadline: new Date(Date.now() + 4 * 3600000).toISOString(),
+      clockStatus: 'ON_TRACK',
+      timeRemainingText: '4h 00m left (Bank Target)',
+      status: 'INVESTIGATING',
+      statusLabel: 'Voice Verified (Investigating)',
+      customerSafeStatusText: 'Your voice dispute has been received. Reversal investigation is in progress.',
+      complaintLetter: data.description,
+      isOverdue: false,
+      history: [
+        {
+          stage: 'REPORTED',
+          label: `Voice Intake Verified (${data.language.toUpperCase()})`,
+          timestamp: new Date().toLocaleTimeString() + ' WAT',
+          details: 'Dispute details captured via voice in native language.',
+          verified: true,
+        },
+        {
+          stage: 'INVESTIGATING',
+          label: 'Switch TSQ Reconciliation Active',
+          timestamp: 'Queued',
+          details: 'Automated TSQ query dispatched to Interswitch/NIBSS.',
+          verified: true,
+        },
+        {
+          stage: 'REVERSAL_INITIATED',
+          label: 'Core Ledger Reversal Posting',
+          timestamp: 'Pending',
+          details: 'Balanced double-entry reversal scheduled upon switch confirmation.',
+          verified: false,
+        },
+        {
+          stage: 'VERIFIED_RESOLVED',
+          label: 'Customer Funds Restored',
+          timestamp: 'Pending',
+          details: 'Official credit advice issued and customer notified via SMS.',
+          verified: false,
+        },
+      ],
+    };
+
+    setCases((prev) => [newCase, ...prev]);
+    setSelectedCase(newCase);
+    setCurrentStep('S8_CASE_TRACKER');
+
+    // Create live exception in bank operations queue
+    const liveException: FinancialException = {
+      id: `exc-voice-${Date.now()}`,
+      transactionId: `tx-voice-${Date.now()}`,
+      reference: data.reference,
+      stan: String(Math.floor(100000 + Math.random() * 900000)),
+      type: 'DEBIT_WITHOUT_CREDIT',
+      classificationCode: 'CUS001',
+      source: 'CUSTOMER',
+      rootCause: 'SWITCH_TIMEOUT',
+      severity: 'HIGH',
+      amount: String(data.amount),
+      currency: data.currency,
+      exposure: String(data.amount),
+      exposureType: 'CUSTOMER_DISPUTE',
+      channel: (data.channel as Channel) || 'ATM',
+      status: 'investigating',
+      lane: 'FAST_TRACK',
+      description: `Voice Dispute [${data.language.toUpperCase()}]: ${data.description}`,
+      detectedAt: new Date().toISOString(),
+      debitTimestamp: new Date().toISOString(),
+      internalSlaTarget: new Date(Date.now() + 4 * 3600000).toISOString(),
+      regulatoryDeadline: new Date(Date.now() + 24 * 3600000).toISOString(),
+      slaStatus: 'ON_TRACK',
+      modelConfidence: 98,
+      modelExplanation: 'Multilingual conversational voice lodgement with verified slot parameters.',
+      priorityScore: 90,
+      priorityFactors: {
+        amountWeight: 30,
+        slaWeight: 30,
+        customerWeight: 25,
+        anomalyWeight: 5,
+        rationale: 'Voice lodgement with high-priority Central Bank SLA clock.',
+      },
+      team: 'DISPUTE_RESOLUTION',
+      sourceFreshness: 'Live (Voice Intake Portal)',
+      sourceFreshnessState: 'LIVE',
+      repeatContactCount: 1,
+      version: 1,
+      notes: [
+        {
+          id: `note-${Date.now()}`,
+          author: 'Multilingual Voice AI Sentinel',
+          authorRole: 'CONTACT_CENTRE_AGENT',
+          timestamp: new Date().toISOString(),
+          text: `Voice Lodgement [${data.language.toUpperCase()}]. ${data.description}`,
+        },
+      ],
+      stateHistory: [
+        {
+          from: 'detected',
+          to: 'investigating',
+          reasonCode: 'VOICE_SLOT_INGESTION',
+          author: 'Voice AI Portal',
+          timestamp: new Date().toISOString(),
+        },
+      ],
+      accountNumber: data.accountNumber,
+      customerName: 'Verified Voice Claimant',
+      rrn: `0029${Math.floor(10000000 + Math.random() * 90000000)}`,
+    };
+
+    apiClient.recordCustomerDisputeException(liveException);
+
+    addToast({
+      type: 'success',
+      title: 'Voice Dispute Lodged Successfully',
+      message: `Case ${data.reference} created. Launching Pizza-Tracker stepper & official receipt...`,
+    });
+  };
+
   return (
     <div className="space-y-6">
       {/* ReverseIt Persistent Navigation Header */}
@@ -283,6 +426,7 @@ export const ReverseItView: React.FC = () => {
         onNavigateToMyCases={() => setCurrentStep('MY_CASES')}
         onStartNewReport={() => setCurrentStep('S1_REPORT_PROBLEM')}
         onQuickTrack={handleQuickTrack}
+        onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
       />
 
       {/* Screen Routing */}
@@ -291,6 +435,7 @@ export const ReverseItView: React.FC = () => {
           onSelectMode={handleSelectIntakeMode}
           onViewMyCases={() => setCurrentStep('MY_CASES')}
           activeCaseCount={cases.length}
+          onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
         />
       )}
 
@@ -367,6 +512,13 @@ export const ReverseItView: React.FC = () => {
           onStartNewReport={() => setCurrentStep('S1_REPORT_PROBLEM')}
         />
       )}
+
+      {/* Multilingual Voice Dispute Modal */}
+      <VoiceDisputeModal
+        isOpen={isVoiceModalOpen}
+        onClose={() => setIsVoiceModalOpen(false)}
+        onDisputeCreated={handleVoiceDisputeCreated}
+      />
     </div>
   );
 };

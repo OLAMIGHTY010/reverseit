@@ -6,6 +6,7 @@ import {
   RefreshCw,
   Search,
   Lock,
+  Mic,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { AgentSearchPanel } from './agent/AgentSearchPanel';
@@ -14,6 +15,7 @@ import { AgentActiveExceptionCard } from './agent/AgentActiveExceptionCard';
 import { AgentVerifiedSuccessCard } from './agent/AgentVerifiedSuccessCard';
 import { AgentDisambiguationCard } from './agent/AgentDisambiguationCard';
 import { AgentDisputeIntakeForm } from './agent/AgentDisputeIntakeForm';
+import { VoiceDisputeModal } from './reverseit/voice/VoiceDisputeModal';
 import { useApp } from '../context/AppContext';
 import { apiClient } from '../services/apiClient';
 import type { CustomerIntakeQuery, AgentQueryResult, Transaction } from '../types/domain';
@@ -23,6 +25,7 @@ export const AgentIntakeView: React.FC = () => {
 
   const [currentQuery, setCurrentQuery] = useState<CustomerIntakeQuery | null>(null);
   const [result, setResult] = useState<AgentQueryResult | null>(null);
+  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isSimulatePermissionDenied, setIsSimulatePermissionDenied] = useState(false);
 
@@ -111,6 +114,18 @@ export const AgentIntakeView: React.FC = () => {
 
         {/* Persona & Test Simulators */}
         <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setIsVoiceModalOpen(true)}
+            leftIcon={<Mic className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />}
+          >
+            <span>Inbound Voice Assist</span>
+            <span className="hidden md:inline text-[10px] text-emerald-600 font-bold ml-1">
+              (Native Voice Intake)
+            </span>
+          </Button>
+
           <button
             type="button"
             onClick={() => setIsSimulatePermissionDenied((prev) => !prev)}
@@ -229,6 +244,20 @@ export const AgentIntakeView: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Multilingual Voice Intake Modal */}
+      <VoiceDisputeModal
+        isOpen={isVoiceModalOpen}
+        onClose={() => setIsVoiceModalOpen(false)}
+        onDisputeCreated={(data) => {
+          handleExecuteSearch({ queryType: 'REFERENCE', reference: data.reference });
+          addToast({
+            type: 'success',
+            title: 'Inbound Voice Dispute Loaded',
+            message: `Case ${data.reference} created from ${data.language.toUpperCase()} voice lodgement and queued for agent triage.`,
+          });
+        }}
+      />
     </div>
   );
 };

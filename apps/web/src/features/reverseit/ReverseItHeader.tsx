@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clock, FileText, Check, Shield, ChevronRight, Search } from 'lucide-react';
+import { Clock, FileText, Check, Shield, ChevronRight, Search, Mic } from 'lucide-react';
 import { Button } from '../../components/Button';
 import type { ReverseItStep } from './reverseitTypes';
 
@@ -9,6 +9,7 @@ export interface ReverseItHeaderProps {
   onNavigateToMyCases: () => void;
   onStartNewReport: () => void;
   onQuickTrack?: (query: string) => void;
+  onOpenVoiceModal?: () => void;
 }
 
 interface StepMilestone {
@@ -31,6 +32,7 @@ export const ReverseItHeader: React.FC<ReverseItHeaderProps> = ({
   onNavigateToMyCases,
   onStartNewReport,
   onQuickTrack,
+  onOpenVoiceModal,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const isMyCases = currentStep === 'MY_CASES';
@@ -81,6 +83,20 @@ export const ReverseItHeader: React.FC<ReverseItHeaderProps> = ({
               />
               <Search className="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2 pointer-events-none" />
             </form>
+          )}
+
+          {onOpenVoiceModal && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onOpenVoiceModal}
+              leftIcon={<Mic className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />}
+            >
+              <span>Voice Dispute</span>
+              <span className="hidden md:inline text-[10px] text-emerald-600 font-bold ml-1">
+                (Ohùn / Hausa)
+              </span>
+            </Button>
           )}
           {isMyCases || isTracker ? (
             <Button

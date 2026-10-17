@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   ArrowRight,
   Zap,
+  Mic,
 } from 'lucide-react';
 import type { IntakeMode } from './reverseitTypes';
 
@@ -14,12 +15,14 @@ export interface S1ReportProblemProps {
   onSelectMode: (mode: IntakeMode) => void;
   onViewMyCases: () => void;
   activeCaseCount: number;
+  onOpenVoiceModal?: () => void;
 }
 
 export const S1ReportProblem: React.FC<S1ReportProblemProps> = ({
   onSelectMode,
   onViewMyCases,
   activeCaseCount,
+  onOpenVoiceModal,
 }) => {
   return (
     <div className="max-w-3xl mx-auto py-4 px-2 sm:px-4 space-y-8 animate-in fade-in duration-300">
@@ -111,6 +114,39 @@ export const S1ReportProblem: React.FC<S1ReportProblemProps> = ({
             <span className="text-[11px] text-[var(--text-muted)]">PNG, JPG or PDF</span>
           </div>
         </button>
+
+        {/* Choice 3: Speak in Native Language (Zero-Literacy Voice Assistant) */}
+        {onOpenVoiceModal && (
+          <button
+            type="button"
+            onClick={onOpenVoiceModal}
+            className="col-span-1 md:col-span-2 p-5 bg-gradient-to-r from-emerald-950 via-slate-900 to-teal-950 text-white rounded-2xl shadow-md hover:shadow-xl transition-all text-left flex items-center justify-between group cursor-pointer border-2 border-emerald-500/50 hover:border-emerald-400 relative overflow-hidden"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-13 h-13 rounded-2xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-lg group-hover:scale-110 transition-transform">
+                <Mic className="w-7 h-7 animate-pulse" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[16px] sm:text-[17px] font-extrabold tracking-tight">
+                    Speak Your Complaint (Ohùn / Magana / Olu / Français)
+                  </span>
+                  <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-400 text-emerald-950 tracking-wider">
+                    Multilingual Voice AI
+                  </span>
+                </div>
+                <p className="text-[12px] sm:text-[13px] text-emerald-200/90 max-w-xl leading-relaxed">
+                  Can&apos;t type or read English? Tap here to talk in <strong>Hausa</strong>, <strong>Yorùbá</strong>, <strong>Igbo</strong>, <strong>Pidgin</strong>, or <strong>French</strong>. Our AI listens, translates, and speaks back to you.
+                </p>
+              </div>
+            </div>
+
+            <div className="hidden sm:flex items-center gap-1.5 text-emerald-300 font-bold text-[13px] shrink-0 group-hover:translate-x-1 transition-transform">
+              <span>Start Voice Lodgement</span>
+              <ArrowRight className="w-4 h-4" />
+            </div>
+          </button>
+        )}
       </div>
 
       {/* Trust & Guarantee Highlights Bar */}
