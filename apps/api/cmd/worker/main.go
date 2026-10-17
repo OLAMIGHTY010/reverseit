@@ -62,7 +62,12 @@ func run() error {
 	}
 	defer pool.Close()
 
-	rc, err := redisx.Open(ctx, redisx.Options{Addr: cfg.RedisAddr(), Password: cfg.RedisPassword, DB: cfg.RedisDB})
+	rc, err := redisx.Open(ctx, redisx.Options{
+		URL:      cfg.RedisURL,
+		Addr:     cfg.RedisAddr(),
+		Password: cfg.RedisPassword,
+		DB:       cfg.RedisDB,
+	})
 	if err != nil {
 		return err
 	}

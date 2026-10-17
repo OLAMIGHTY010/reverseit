@@ -13,6 +13,7 @@ import (
 
 // Options configures the client.
 type Options struct {
+	URL      string
 	Addr     string
 	Password string
 	DB       int
@@ -26,17 +27,28 @@ type Client struct {
 // Open creates a client and verifies connectivity. Errors never include the
 // password.
 func Open(ctx context.Context, o Options) (*Client, error) {
-	if o.Addr == "" {
-		return nil, errors.New("redis: address is required")
+	var opt *redis.Options
+	if o.URL != "" {
+		parsed, err := redis.ParseURL(o.URL)
+		if err != nil {
+			return nil, fmt.Errorf("redis: invalid url: %w", err)
+		}
+		opt = parsed
+	} else {
+		if o.Addr == "" {
+			return nil, errors.New("redis: address is required")
+		}
+		opt = &redis.Options{
+			Addr:     o.Addr,
+			Password: o.Password,
+			DB:       o.DB,
+		}
 	}
-	c := &Client{Client: redis.NewClient(&redis.Options{
-		Addr:         o.Addr,
-		Password:     o.Password,
-		DB:           o.DB,
-		DialTimeout:  3 * time.Second,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 5 * time.Second,
-	})}
+	opt.DialTimeout = 3 * time.Second
+	opt.ReadTimeout = 5 * time.Second
+	opt.WriteTimeout = 5 * time.Second
+
+	c := &Client{Client: redis.NewClient(opt)}
 	if err := c.Check(ctx); err != nil {
 		_ = c.Close()
 		return nil, fmt.Errorf("redis: initial ping failed: %w", errors.Unwrap(err))
