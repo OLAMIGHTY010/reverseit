@@ -13,13 +13,13 @@ var nigerianPhoneRegex = regexp.MustCompile(`^(?:\+234|234|0)(?:70|80|81|90|91)\
 type TelcoProvider string
 
 const (
-	TelcoMTN         TelcoProvider = "MTN"
-	TelcoAirtel      TelcoProvider = "AIRTEL"
-	TelcoGlo         TelcoProvider = "GLO"
-	Telco9mobile     TelcoProvider = "9MOBILE"
-	AggregatorCoral  TelcoProvider = "CORALPAY"
-	AggregatorQuick  TelcoProvider = "QUICKTELLER"
-	AggregatorUpper  TelcoProvider = "UPPERLINK"
+	TelcoMTN        TelcoProvider = "MTN"
+	TelcoAirtel     TelcoProvider = "AIRTEL"
+	TelcoGlo        TelcoProvider = "GLO"
+	Telco9mobile    TelcoProvider = "9MOBILE"
+	AggregatorCoral TelcoProvider = "CORALPAY"
+	AggregatorQuick TelcoProvider = "QUICKTELLER"
+	AggregatorUpper TelcoProvider = "UPPERLINK"
 )
 
 // TelecomOutcome extends standard outcomes with telecom vendor specific attributes (Prompt B11).

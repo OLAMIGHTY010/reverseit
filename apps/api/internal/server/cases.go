@@ -632,4 +632,3 @@ func (s *Services) sweepSLAs(w http.ResponseWriter, r *http.Request) {
 		Cases:         items,
 	})
 }
-

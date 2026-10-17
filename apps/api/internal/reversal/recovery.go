@@ -407,10 +407,10 @@ func (s *Service) recoverSingleTimeout(ctx context.Context, tenant, reversalID u
 
 			actor := cases.System
 			_ = s.event(ctx, tx, tenant, rev.CaseID, actor, "timeout_subcase_opened", map[string]any{
-				"reversal":     rev.Ref,
-				"subcase_id":   subCase.ID.String(),
-				"subcase_ref":  subCase.Ref,
-				"attempt_no":   newAttempt,
+				"reversal":    rev.Ref,
+				"subcase_id":  subCase.ID.String(),
+				"subcase_ref": subCase.Ref,
+				"attempt_no":  newAttempt,
 			})
 			_ = s.auditEvent(ctx, tx, tenant, actor, "reversal.timeout_subcase_opened", rev.Ref, rev.Gate.PolicyVersion, map[string]any{
 				"subcase_id":  subCase.ID.String(),
