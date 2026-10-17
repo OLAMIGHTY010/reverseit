@@ -10,6 +10,7 @@ import {
   Languages,
   ArrowRight,
   Sparkles,
+  Settings,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { Button } from '../../../components/Button';
@@ -17,13 +18,21 @@ import {
   SUPPORTED_LANGUAGES,
   VOICE_DEMO_PRESETS,
   analyzeVoiceUtterance,
-  speakNativeVoice,
   type SupportedLanguage,
   type DisputeSlots,
   type DialogueTurn,
   type MandatorySlot,
   type VoiceDemoPreset,
 } from './VoiceDisputeEngine';
+import {
+  type VoiceEngineConfig,
+  loadVoiceEngineConfig,
+  saveVoiceEngineConfig,
+  playUniversalBotVoice,
+  universalAudioPlayer,
+  VOICE_ENGINES,
+} from './VoiceEngineManager';
+import { VoiceEngineSettingsModal } from './VoiceEngineSettingsModal';
 
 interface VoiceDisputeModalProps {
   isOpen: boolean;
@@ -44,6 +53,8 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
   onClose,
   onDisputeCreated,
 }) => {
+  const [engineConfig, setEngineConfig] = useState<VoiceEngineConfig>(loadVoiceEngineConfig);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('yo');
   const [voiceCadence, setVoiceCadence] = useState<'ultra-clear' | 'natural' | 'brisk'>('ultra-clear');
   const [isRecording, setIsRecording] = useState(false);
@@ -62,9 +73,34 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
     return 1.02;
   };
 
+  const stopVoice = () => {
+    universalAudioPlayer.stop();
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsAiSpeaking(false);
+  };
+
+  const speakBotMessage = (text: string, lang: SupportedLanguage) => {
+    stopVoice();
+    setIsAiSpeaking(true);
+    const activeConfig: VoiceEngineConfig = {
+      ...engineConfig,
+      speed: getSpeechRate(),
+    };
+    playUniversalBotVoice(text, lang, activeConfig, {
+      onStart: () => setIsAiSpeaking(true),
+      onEnd: () => setIsAiSpeaking(false),
+      onError: () => setIsAiSpeaking(false),
+    });
+  };
+
   // Initialize initial greeting when modal opens or language changes
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      stopVoice();
+      return;
+    }
 
     const langInfo = SUPPORTED_LANGUAGES[selectedLanguage];
     const initialTurn: DialogueTurn = {
@@ -81,30 +117,13 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
     setPresetStep(0);
     setActivePreset(null);
 
-    // Speak initial greeting aloud with deliberate articulation & boost
-    setIsAiSpeaking(true);
-    speakNativeVoice(
-      langInfo.greetingPrompt,
-      selectedLanguage,
-      { rate: getSpeechRate(), pitch: 1.06, volume: 1.0 },
-      () => {
-        setIsAiSpeaking(false);
-      }
-    );
+    // Speak initial greeting aloud with active voice engine
+    speakBotMessage(langInfo.greetingPrompt, selectedLanguage);
   }, [isOpen, selectedLanguage]);
 
   const handleSoundCheck = () => {
     const langInfo = SUPPORTED_LANGUAGES[selectedLanguage];
-    window.speechSynthesis?.cancel();
-    setIsAiSpeaking(true);
-    speakNativeVoice(
-      langInfo.greetingPrompt,
-      selectedLanguage,
-      { rate: getSpeechRate(), pitch: 1.06, volume: 1.0 },
-      () => {
-        setIsAiSpeaking(false);
-      }
-    );
+    speakBotMessage(langInfo.greetingPrompt, selectedLanguage);
   };
 
   useEffect(() => {
@@ -143,16 +162,8 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
       };
       nextDialogue.push(aiTurn);
 
-      // Play AI voice reply in native language with deliberate articulation & boost
-      setIsAiSpeaking(true);
-      speakNativeVoice(
-        analysis.suggestedPrompt.prompt,
-        selectedLanguage,
-        { rate: getSpeechRate(), pitch: 1.06, volume: 1.0 },
-        () => {
-          setIsAiSpeaking(false);
-        }
-      );
+      // Play AI voice reply using active voice engine
+      speakBotMessage(analysis.suggestedPrompt.prompt, selectedLanguage);
     }
 
     setDialogueHistory(nextDialogue);
@@ -346,14 +357,14 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
             </button>
 
             <span className="text-[10px] text-[var(--text-muted)] font-medium hidden sm:inline">
-              Pacing / Cadence:
+              Pacing:
             </span>
 
             {/* Cadence Pills */}
             <div className="flex items-center bg-[var(--surface)] border border-[var(--surface-border-subtle)] rounded-full p-0.5 text-[10px] font-bold">
               {(
                 [
-                  { id: 'ultra-clear', label: '0.85x Ultra-Clear' },
+                  { id: 'ultra-clear', label: '0.85x Clear' },
                   { id: 'natural', label: '0.92x Natural' },
                   { id: 'brisk', label: '1.0x Normal' },
                 ] as const
@@ -374,9 +385,24 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2 text-[10px] text-emerald-800 dark:text-emerald-300 font-mono-financial shrink-0">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>100% Vol • Acoustic Boost • Phonetic Tuning Active</span>
+          {/* Engine Selector & Free Cloud API Settings Button */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--surface)] border border-[var(--surface-border-subtle)] hover:border-emerald-400 text-[10px] font-bold text-[var(--text-secondary)] shadow-xs transition-all"
+              title="Configure Free Voice Engines (Studio Native, Azure F0, YarnGPT)"
+            >
+              <Settings className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              <span>{VOICE_ENGINES[engineConfig.engine].name.split(' ')[0]}</span>
+              <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 font-extrabold uppercase">
+                {VOICE_ENGINES[engineConfig.engine].badge.split('•')[0].trim()}
+              </span>
+            </button>
+
+            <div className="hidden md:flex items-center gap-1.5 text-[10px] text-emerald-800 dark:text-emerald-300 font-mono-financial">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>100% Vol • Boosted</span>
+            </div>
           </div>
         </div>
 
@@ -460,16 +486,10 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
 
                   {!isCustomer && (
                     <button
-                      onClick={() =>
-                        speakNativeVoice(turn.audioText, turn.language, {
-                          rate: getSpeechRate(),
-                          pitch: 1.06,
-                          volume: 1.0,
-                        })
-                      }
+                      onClick={() => speakBotMessage(turn.audioText, turn.language)}
                       className="pt-1 flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
                     >
-                      <Volume2 className="w-3.5 h-3.5" /> Replay in HD {SUPPORTED_LANGUAGES[turn.language].nativeName} (Sharp & Loud)
+                      <Volume2 className="w-3.5 h-3.5" /> Replay in {SUPPORTED_LANGUAGES[turn.language].nativeName} ({VOICE_ENGINES[engineConfig.engine].name.split(' ')[0]})
                     </button>
                   )}
                 </div>
@@ -510,10 +530,7 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
 
             {isAiSpeaking && (
               <button
-                onClick={() => {
-                  window.speechSynthesis?.cancel();
-                  setIsAiSpeaking(false);
-                }}
+                onClick={stopVoice}
                 className="text-[11px] text-[var(--text-muted)] hover:text-rose-600 flex items-center gap-1"
               >
                 <VolumeX className="w-3.5 h-3.5" /> Stop Voice
@@ -599,6 +616,18 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
           </Button>
         </div>
       </div>
+
+      {/* Voice Engine & Language API Settings Modal */}
+      <VoiceEngineSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        config={engineConfig}
+        onSaveConfig={(newCfg) => {
+          setEngineConfig(newCfg);
+          saveVoiceEngineConfig(newCfg);
+        }}
+        currentLanguage={selectedLanguage}
+      />
     </div>
   );
 };
