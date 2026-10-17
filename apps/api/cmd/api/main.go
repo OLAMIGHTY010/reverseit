@@ -78,7 +78,16 @@ func run() error {
 
 	// The pipeline report reads stream backlog. The client connects lazily, so an
 	// unreachable Redis does not stop the API; the report says it is unavailable.
-	redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr(), Password: cfg.RedisPassword, DB: cfg.RedisDB})
+	var redisClient *redis.Client
+	if cfg.RedisURL != "" {
+		parsedOpt, err := redis.ParseURL(cfg.RedisURL)
+		if err != nil {
+			return fmt.Errorf("redis: invalid REDIS_URL: %w", err)
+		}
+		redisClient = redis.NewClient(parsedOpt)
+	} else {
+		redisClient = redis.NewClient(&redis.Options{Addr: cfg.RedisAddr(), Password: cfg.RedisPassword, DB: cfg.RedisDB})
+	}
 	defer redisClient.Close()
 
 	signer, verifier, err := identity.Load(cfg.JWTKeyID, cfg.JWTPrivateKey, cfg.JWTPublicKeys, cfg.JWTTokenTTL)

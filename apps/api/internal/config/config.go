@@ -46,6 +46,7 @@ type Config struct {
 	DBMaxConns        int
 	DBConnMaxLifetime time.Duration
 
+	RedisURL      string
 	RedisHost     string
 	RedisPort     int
 	RedisPassword string
@@ -112,6 +113,7 @@ func LoadFrom(lookup func(string) (string, bool)) (*Config, error) {
 		DBSSLMode:         l.str("DB_SSLMODE", "disable"),
 		DBMaxConns:        l.positiveInt("DB_MAX_OPEN_CONNS", 25),
 		DBConnMaxLifetime: l.duration("DB_CONN_MAX_LIFETIME", 5*time.Minute),
+		RedisURL:          l.str("REDIS_URL", ""),
 		RedisHost:         l.str("REDIS_HOST", "localhost"),
 		RedisPort:         l.port("REDIS_PORT", 6379),
 		RedisPassword:     l.str("REDIS_PASSWORD", ""),
