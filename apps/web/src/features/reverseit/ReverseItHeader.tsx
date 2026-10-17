@@ -1,5 +1,5 @@
-import React from 'react';
-import { Clock, FileText, Check, Shield, ChevronRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { Clock, FileText, Check, Shield, ChevronRight, Search } from 'lucide-react';
 import { Button } from '../../components/Button';
 import type { ReverseItStep } from './reverseitTypes';
 
@@ -8,6 +8,7 @@ export interface ReverseItHeaderProps {
   activeCaseCount: number;
   onNavigateToMyCases: () => void;
   onStartNewReport: () => void;
+  onQuickTrack?: (query: string) => void;
 }
 
 interface StepMilestone {
@@ -29,10 +30,19 @@ export const ReverseItHeader: React.FC<ReverseItHeaderProps> = ({
   activeCaseCount,
   onNavigateToMyCases,
   onStartNewReport,
+  onQuickTrack,
 }) => {
+  const [searchQuery, setSearchQuery] = useState('');
   const isMyCases = currentStep === 'MY_CASES';
   const isTracker = currentStep === 'S8_CASE_TRACKER' || currentStep === 'S9_ESCALATION_LADDER';
   const isWizard = !isMyCases && !isTracker;
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (searchQuery.trim() && onQuickTrack) {
+      onQuickTrack(searchQuery);
+    }
+  };
 
   // Determine current milestone index
   const currentMilestoneIndex = MILESTONES.findIndex((m) =>
@@ -44,7 +54,7 @@ export const ReverseItHeader: React.FC<ReverseItHeaderProps> = ({
   return (
     <div className="space-y-4">
       {/* Top action row */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-1 border-b border-[var(--surface-border-subtle)]">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-[var(--surface-border-subtle)]">
         <div className="flex items-center gap-2 text-[13px]">
           <span className="font-bold text-[var(--text-primary)]">Dispute Resolution Center</span>
           <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
@@ -57,7 +67,21 @@ export const ReverseItHeader: React.FC<ReverseItHeaderProps> = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Quick Search & Actions */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Quick Track Input */}
+          {onQuickTrack && (
+            <form onSubmit={handleSearchSubmit} className="relative flex items-center">
+              <input
+                type="text"
+                placeholder="Track Ref / RRN..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-38 sm:w-48 pl-7 pr-2.5 py-1 text-[11px] font-mono rounded-xl bg-[var(--canvas-subdued)] border border-[var(--surface-border)] text-[var(--text-primary)] focus:outline-hidden focus:ring-1 focus:ring-sky-500 transition-all placeholder:text-[var(--text-muted)] placeholder:font-sans"
+              />
+              <Search className="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2 pointer-events-none" />
+            </form>
+          )}
           {isMyCases || isTracker ? (
             <Button
               variant="primary"

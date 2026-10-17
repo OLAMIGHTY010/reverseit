@@ -247,6 +247,33 @@ export const ReverseItView: React.FC = () => {
     setCurrentStep('S8_CASE_TRACKER');
   };
 
+  // Quick Track Search by Reference or Case Number
+  const handleQuickTrack = (query: string) => {
+    const q = query.trim().toLowerCase();
+    if (!q) return;
+    const found = cases.find(
+      (c) =>
+        c.caseNumber.toLowerCase().includes(q) ||
+        c.reference.toLowerCase().includes(q) ||
+        (c.maskedAccount && c.maskedAccount.toLowerCase().includes(q))
+    );
+    if (found) {
+      setSelectedCase(found);
+      setCurrentStep('S8_CASE_TRACKER');
+      addToast({
+        type: 'info',
+        title: 'Case Loaded',
+        message: `Displaying tracking details for case ${found.caseNumber}`,
+      });
+    } else {
+      addToast({
+        type: 'warning',
+        title: 'Reference Not Found',
+        message: `No active dispute matches "${query}". Try searching "CAS-2026-9041" or check My Cases.`,
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* ReverseIt Persistent Navigation Header */}
@@ -255,6 +282,7 @@ export const ReverseItView: React.FC = () => {
         activeCaseCount={cases.length}
         onNavigateToMyCases={() => setCurrentStep('MY_CASES')}
         onStartNewReport={() => setCurrentStep('S1_REPORT_PROBLEM')}
+        onQuickTrack={handleQuickTrack}
       />
 
       {/* Screen Routing */}
