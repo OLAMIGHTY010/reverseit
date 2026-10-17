@@ -15,6 +15,9 @@ import { Button } from '../../components/Button';
 import { MaskedField } from '../../components/MaskedField';
 import { useApp } from '../../context/AppContext';
 import { apiClient } from '../../services/apiClient';
+import { calculateDisputeAbuseProfile } from '../fraud/DisputeAbuseEngine';
+import { DisputeAbuseBadge } from '../fraud/DisputeAbuseBadge';
+import { DisputeAbuseModal } from '../fraud/DisputeAbuseModal';
 import type { AgentQueryResult } from '../../types/domain';
 
 export interface AgentActiveExceptionCardProps {
@@ -29,6 +32,7 @@ export const AgentActiveExceptionCard: React.FC<AgentActiveExceptionCardProps> =
   const { addToast } = useApp();
   const exc = result.exception;
   const [isLogCallOpen, setIsLogCallOpen] = useState(false);
+  const [isAbuseModalOpen, setIsAbuseModalOpen] = useState(false);
   const [callerPhone, setCallerPhone] = useState(exc?.customerPhone || '+234 ');
   const [callNotes, setCallNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -125,6 +129,19 @@ export const AgentActiveExceptionCard: React.FC<AgentActiveExceptionCardProps> =
             <PhoneCall className="w-3.5 h-3.5" />
             <span>{exc.repeatContactCount || 1} Inquiries</span>
           </div>
+
+          <DisputeAbuseBadge
+            profile={
+              exc.disputeAbuseProfile ||
+              calculateDisputeAbuseProfile({
+                amount: exc.amount,
+                channel: exc.channel,
+                repeatContactCount: exc.repeatContactCount,
+              })
+            }
+            onClick={() => setIsAbuseModalOpen(true)}
+            compact
+          />
         </div>
       </div>
 
@@ -303,6 +320,23 @@ export const AgentActiveExceptionCard: React.FC<AgentActiveExceptionCardProps> =
             </Button>
           </div>
         </div>
+      )}
+
+      {/* Part 2: Customer Dispute Abuse Dossier Modal */}
+      {isAbuseModalOpen && (
+        <DisputeAbuseModal
+          isOpen={isAbuseModalOpen}
+          onClose={() => setIsAbuseModalOpen(false)}
+          exception={exc}
+          profile={
+            exc.disputeAbuseProfile ||
+            calculateDisputeAbuseProfile({
+              amount: exc.amount,
+              channel: exc.channel,
+              repeatContactCount: exc.repeatContactCount,
+            })
+          }
+        />
       )}
     </div>
   );

@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, ArrowRight, ShieldAlert, Check } from 'lucide-react';
+import { X, ArrowRight, ShieldAlert, Check, KeyRound } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { StatusBadge } from '../../components/StatusBadge';
+import { getMakerCheckerPolicy } from '../fraud/DisputeAbuseEngine';
 import type { FinancialStatus, FinancialException } from '../../types/domain';
 
 interface StateChangeModalProps {
@@ -170,6 +171,22 @@ export const StateChangeModal: React.FC<StateChangeModalProps> = ({
               ))}
             </div>
           </div>
+
+          {/* Maker-Checker Institutional Notice */}
+          {activeStatus === 'approval' && (() => {
+            const policy = getMakerCheckerPolicy(exception.amount, exception.currency);
+            return (
+              <div className="p-3 bg-purple-50/70 border border-purple-200 rounded text-purple-950 text-[12px] space-y-1">
+                <div className="flex items-center gap-1.5 font-bold text-purple-900">
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>{policy.tier.replace(/_/g, ' ')} Enforcement</span>
+                </div>
+                <p className="text-[11px] leading-relaxed text-purple-900/90 font-mono-financial">
+                  {policy.policyDescription}
+                </p>
+              </div>
+            );
+          })()}
 
           {/* Reason Code */}
           <div>

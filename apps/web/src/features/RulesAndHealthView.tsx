@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Sliders, Activity } from 'lucide-react';
+import { Sliders, Activity, Server } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import {
   DEFAULT_SAFETY_GATE_CONFIG,
@@ -12,11 +12,12 @@ import type {
 } from './rules/rulesTypes';
 import { RulesEditorTab } from './rules/RulesEditorTab';
 import { IntegrationHealthTab } from './rules/IntegrationHealthTab';
+import { SwitchPacketAndCBSInspector } from './rules/SwitchPacketAndCBSInspector';
 
 export const RulesAndHealthView: React.FC = () => {
   const { addToast } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'RULES' | 'HEALTH'>('RULES');
+  const [activeTab, setActiveTab] = useState<'RULES' | 'HEALTH' | 'SWITCH_CBS'>('RULES');
   const [config, setConfig] = useState<SafetyGateRulesConfig>(DEFAULT_SAFETY_GATE_CONFIG);
   const [adapters, setAdapters] = useState<AdapterHealthStatus[]>(INITIAL_ADAPTER_HEALTH);
   const [isInjecting, setIsInjecting] = useState(false);
@@ -144,6 +145,18 @@ export const RulesAndHealthView: React.FC = () => {
           <Activity className="w-4 h-4" />
           <span>Core Banking & Switch Integration Health</span>
         </button>
+
+        <button
+          onClick={() => setActiveTab('SWITCH_CBS')}
+          className={`px-4 py-2 text-[13px] font-bold rounded-md transition-colors flex items-center gap-2 ${
+            activeTab === 'SWITCH_CBS'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'bg-[var(--surface)] border border-[var(--surface-border)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+          }`}
+        >
+          <Server className="w-4 h-4" />
+          <span>Switch & CBS Packet Simulator</span>
+        </button>
       </div>
 
       {/* Tab Contents */}
@@ -153,13 +166,15 @@ export const RulesAndHealthView: React.FC = () => {
           onSaveProposedConfig={handleSaveProposedConfig}
           onResetDefaults={handleResetDefaults}
         />
-      ) : (
+      ) : activeTab === 'HEALTH' ? (
         <IntegrationHealthTab
           adapters={adapters}
           onToggleCircuitBreaker={handleToggleCircuitBreaker}
           onInjectFault={handleInjectFault}
           isInjecting={isInjecting}
         />
+      ) : (
+        <SwitchPacketAndCBSInspector />
       )}
     </div>
   );

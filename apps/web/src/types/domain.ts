@@ -162,6 +162,9 @@ export interface FinancialException {
   rrn?: string;
   stan?: string;
   resolutionCode?: string;
+  disputeAbuseProfile?: DisputeAbuseProfile;
+  makerCheckerTier?: MakerCheckerTier;
+  statutoryFineExposureNgn?: number;
 }
 
 export type TimelineSource =
@@ -474,5 +477,69 @@ export interface ReversalDetailRecord extends ReversalProposal {
   exposureAmount: string;
   policyLimit: string;
   isWithinPolicyLimit: boolean;
+  abuseProfile?: DisputeAbuseProfile;
+  makerCheckerTier?: MakerCheckerTier;
+}
+
+export type DisputeAbuseRiskTier =
+  | 'LOW_RISK_TRUSTED'
+  | 'STANDARD'
+  | 'ELEVATED_WATCH'
+  | 'HIGH_RISK_RESTRICTED';
+
+export type DisputeAbuseFlagCode =
+  | 'VELOCITY_SPIKE'
+  | 'SUSPECTED_FRIENDLY_FRAUD'
+  | 'ATM_CASH_TRAP_CLAIM'
+  | 'REPEAT_DISPUTER'
+  | 'CREDIT_ABUSE_RISK'
+  | 'BENEFICIARY_COLLUSION_SUSPECT';
+
+export interface DisputeAbuseFlag {
+  code: DisputeAbuseFlagCode;
+  severity: 'INFO' | 'WARNING' | 'CRITICAL';
+  title: string;
+  description: string;
+}
+
+export interface DisputeAbuseProfile {
+  score: number; // 0 - 100
+  tier: DisputeAbuseRiskTier;
+  disputeVelocity7d: number;
+  disputeVelocity30d: number;
+  historicalFalseClaimRatePct: number;
+  totalDisputesFiled: number;
+  totalReversalsApproved: number;
+  flags: DisputeAbuseFlag[];
+  recommendation:
+    | 'AUTO_APPROVE_ELIGIBLE'
+    | 'STANDARD_OPS_REVIEW'
+    | 'MANDATORY_IN_BRANCH_VERIFICATION'
+    | 'REJECT_SUSPECTED_FRAUD';
+}
+
+export type MakerCheckerTier = 'TIER_1_AUTO' | 'TIER_2_SINGLE_MAKER' | 'TIER_3_DUAL_CONTROL';
+
+export interface MakerCheckerPolicy {
+  tier: MakerCheckerTier;
+  requiresChecker: boolean;
+  minAmount: number;
+  maxAmount: number;
+  currency: string;
+  policyDescription: string;
+}
+
+export interface BatchReversalResult {
+  batchId: string;
+  dispatchedAt: string;
+  totalCount: number;
+  successfulCount: number;
+  skippedCount: number;
+  totalExposure: string;
+  currency: string;
+  makerId: string;
+  checkerId?: string;
+  glPostingRef: string;
+  itemReferences: string[];
 }
 

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, AlertTriangle, AlertOctagon, CheckCircle2 } from 'lucide-react';
+import { Clock, AlertTriangle, AlertOctagon, CheckCircle2, ShieldAlert } from 'lucide-react';
 import clsx from 'clsx';
 import type { SLAStatus } from '../../types/domain';
+import { calculateStatutoryFineExposure } from '../fraud/DisputeAbuseEngine';
 
 interface CountdownTimerProps {
   targetDate: string; // ISO format
@@ -21,26 +22,32 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
   useEffect(() => {
     const timer = setInterval(() => {
       setTimeLeft(calculateDelta(targetDate));
-    }, 30000); // Update every 30s
+    }, 15000); // Update every 15s
     return () => clearInterval(timer);
   }, [targetDate]);
 
-  const { isBreached, formatted, status } = timeLeft;
+  const { isBreached, formatted, status, minutesRemaining } = timeLeft;
+  const isUrgentSla = !isBreached && minutesRemaining <= 240; // Under 4 hours
+  const fineInfo = type === 'regulatory' ? calculateStatutoryFineExposure(targetDate) : null;
 
   const badgeColor = isBreached
-    ? 'bg-rose-50 text-rose-800 border-rose-300'
+    ? 'bg-rose-50 text-rose-800 border-rose-300 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800'
+    : isUrgentSla
+    ? 'bg-amber-100 text-amber-950 border-amber-400 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-700 animate-pulse'
     : status === 'APPROACHING'
-    ? 'bg-amber-50 text-amber-900 border-amber-300'
-    : 'bg-slate-50 text-slate-700 border-slate-300';
+    ? 'bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
+    : 'bg-slate-50 text-slate-700 border-slate-300 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700';
 
   const icon = isBreached ? (
-    <AlertOctagon className="w-3 h-3 text-rose-600 shrink-0 animate-pulse" />
+    <AlertOctagon className="w-3.5 h-3.5 text-rose-600 shrink-0 animate-pulse" />
+  ) : isUrgentSla ? (
+    <ShieldAlert className="w-3.5 h-3.5 text-amber-700 shrink-0" />
   ) : status === 'APPROACHING' ? (
-    <AlertTriangle className="w-3 h-3 text-amber-600 shrink-0" />
+    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
   ) : type === 'regulatory' ? (
-    <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+    <Clock className="w-3.5 h-3.5 text-sky-600 shrink-0" />
   ) : (
-    <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
   );
 
   return (
@@ -50,20 +57,27 @@ export const CountdownTimer: React.FC<CountdownTimerProps> = ({
         badgeColor,
         compact ? 'text-[10px] px-1.5 py-0' : 'text-[11px]'
       )}
-      title={`${label || (type === 'regulatory' ? 'Regulatory Deadline' : 'Internal SLA Target')}: ${targetDate}`}
+      title={`${label || (type === 'regulatory' ? 'CBN / Central Bank Statutory Deadline' : 'Internal Bank Target SLA')}: ${targetDate}${
+        fineInfo?.isBreached ? ` • Accrued Statutory Fine: ₦${fineInfo.accruedFineNgn.toLocaleString()} (${fineInfo.daysOverdue} days overdue)` : ''
+      }`}
     >
       {icon}
       {label && <span className="text-[10px] uppercase font-sans font-bold opacity-75">{label}:</span>}
-      <span className={clsx(isBreached && 'font-bold text-rose-700')}>
+      <span className={clsx(isBreached && 'font-bold text-rose-700 dark:text-rose-400')}>
         {formatted}
       </span>
       {isBreached && (
-        <span className="text-[9px] font-sans uppercase font-extrabold px-1 py-0.2 rounded bg-rose-200 text-rose-900">
-          BREACHED
+        <span className="text-[9px] font-sans uppercase font-extrabold px-1 py-0.2 rounded bg-rose-200 text-rose-900 dark:bg-rose-900 dark:text-rose-100">
+          {type === 'regulatory' && fineInfo ? `BREACH • +₦${(fineInfo.accruedFineNgn / 1000).toFixed(0)}k FINE` : 'BREACHED'}
         </span>
       )}
-      {!isBreached && status === 'APPROACHING' && (
-        <span className="text-[9px] font-sans uppercase font-extrabold px-1 py-0.2 rounded bg-amber-200 text-amber-900">
+      {!isBreached && isUrgentSla && (
+        <span className="text-[9px] font-sans uppercase font-extrabold px-1 py-0.2 rounded bg-amber-300 text-amber-950 dark:bg-amber-800 dark:text-amber-100">
+          ESCALATE (&lt;4H)
+        </span>
+      )}
+      {!isBreached && !isUrgentSla && status === 'APPROACHING' && (
+        <span className="text-[9px] font-sans uppercase font-extrabold px-1 py-0.2 rounded bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-200">
           DUE SOON
         </span>
       )}

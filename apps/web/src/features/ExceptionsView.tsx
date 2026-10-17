@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronUp,
   X,
+  ShieldAlert,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { Button } from '../components/Button';
@@ -27,6 +28,11 @@ import { StateChangeModal } from './exceptions/StateChangeModal';
 import { AssignModal } from './exceptions/AssignModal';
 import { ConflictDialog } from './exceptions/ConflictDialog';
 import { KeyboardShortcutsModal } from './exceptions/KeyboardShortcutsModal';
+import { calculateDisputeAbuseProfile } from './fraud/DisputeAbuseEngine';
+import { DisputeAbuseBadge } from './fraud/DisputeAbuseBadge';
+import { DisputeAbuseModal } from './fraud/DisputeAbuseModal';
+import { MakerCheckerAuthorizationModal } from './reversals/MakerCheckerAuthorizationModal';
+import { BatchReversalModal } from './exceptions/BatchReversalModal';
 import { useApp } from '../context/AppContext';
 import { apiClient } from '../services/apiClient';
 import { INITIAL_EXCEPTIONS } from '../services/mockSimulatorData';
@@ -34,12 +40,14 @@ import type {
   FinancialException,
   FinancialStatus,
   ExceptionTeam,
+  BatchReversalResult,
 } from '../types/domain';
 
 type SavedViewTab =
   | 'TRIAGE'
   | 'CUSTOMER_REPORTED'
   | 'SLA_CRITICAL'
+  | 'FRAUD_WATCH'
   | 'MY_CASES'
   | 'FAST_TRACK'
   | 'UNASSIGNED'
@@ -56,6 +64,11 @@ export const ExceptionsView: React.FC = () => {
   const [selectedExceptionId, setSelectedExceptionId] = useState<string | null>(null);
   const [checkedIds, setCheckedIds] = useState<string[]>([]);
   const [focusedRowIndex, setFocusedRowIndex] = useState<number>(0);
+
+  // Part 2: Fraud & Dual-Control State
+  const [selectedAbuseException, setSelectedAbuseException] = useState<FinancialException | null>(null);
+  const [selectedMakerCheckerException, setSelectedMakerCheckerException] = useState<FinancialException | null>(null);
+  const [isBatchReversalModalOpen, setIsBatchReversalModalOpen] = useState(false);
 
   // States: loading, error, stale data
   const [isLoading, setIsLoading] = useState(false);
@@ -177,6 +190,8 @@ export const ExceptionsView: React.FC = () => {
           return { ...prev, customerReportedOnly: true, myCasesOnly: false, unassignedOnly: false, slaState: 'ALL', lane: 'ALL' };
         case 'SLA_CRITICAL':
           return { ...prev, customerReportedOnly: false, myCasesOnly: false, unassignedOnly: false, slaState: 'BREACHED' };
+        case 'FRAUD_WATCH':
+          return { ...prev, customerReportedOnly: false, myCasesOnly: false, unassignedOnly: false, slaState: 'ALL', lane: 'ALL' };
         case 'MY_CASES':
           return { ...prev, customerReportedOnly: false, myCasesOnly: true, unassignedOnly: false, slaState: 'ALL' };
         case 'FAST_TRACK':
@@ -273,6 +288,16 @@ export const ExceptionsView: React.FC = () => {
       // Saved view tab filter for TRIAGE
       if (activeTab === 'TRIAGE') {
         if (exc.priorityScore < 75 && exc.slaStatus === 'ON_TRACK') return false;
+      }
+
+      // Saved view tab filter for FRAUD_WATCH
+      if (activeTab === 'FRAUD_WATCH') {
+        const abuse = exc.disputeAbuseProfile || calculateDisputeAbuseProfile({
+          amount: exc.amount,
+          channel: exc.channel,
+          repeatContactCount: exc.repeatContactCount,
+        });
+        if (abuse.score < 25) return false;
       }
 
       return true;
@@ -502,6 +527,59 @@ export const ExceptionsView: React.FC = () => {
     setExceptions((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
   };
 
+  // Part 2: Batch Reversal Execution Handler
+  const handleExecuteBatchReversals = async (result: BatchReversalResult) => {
+    addToast({
+      type: 'success',
+      title: 'Batch Reversals Dispatched',
+      message: `Batch ${result.batchId}: ${result.successfulCount} transactions submitted to core ledger (${result.currency} ${result.totalExposure}).`,
+    });
+    setExceptions((prev) =>
+      prev.map((e) =>
+        result.itemReferences.includes(e.reference)
+          ? { ...e, status: 'resolved', version: e.version + 1 }
+          : e
+      )
+    );
+    setCheckedIds([]);
+  };
+
+  // Part 2: Maker-Checker Dual-Control Counter-Sign Handler
+  const handleConfirmDualControlAuth = async (params: {
+    decision: 'APPROVE' | 'REJECT';
+    supervisorPin: string;
+    authSignatureHash: string;
+    notes: string;
+  }) => {
+    if (!selectedMakerCheckerException) return;
+    const newStatus: FinancialStatus = params.decision === 'APPROVE' ? 'resolved' : 'failed';
+    try {
+      const updated = await apiClient.updateExceptionStatus(
+        selectedMakerCheckerException.id,
+        newStatus,
+        'DUAL_CONTROL_CHECKER_AUTH',
+        `Supervisor Checker (PIN ${params.supervisorPin.slice(0, 1)}***)`,
+        `${params.notes} [SIG: ${params.authSignatureHash.slice(0, 20)}...]`,
+        selectedMakerCheckerException.version
+      );
+      setExceptions((prev) =>
+        prev.map((e) => (e.id === selectedMakerCheckerException.id ? updated : e))
+      );
+      addToast({
+        type: params.decision === 'APPROVE' ? 'success' : 'warning',
+        title: params.decision === 'APPROVE' ? 'Dual-Control Approved & Settled' : 'Proposal Rejected',
+        message: `Case ${selectedMakerCheckerException.reference} resolved with counter-signature ${params.authSignatureHash.slice(0, 16)}...`,
+      });
+      setSelectedMakerCheckerException(null);
+    } catch (err: unknown) {
+      addToast({
+        type: 'error',
+        title: 'Authorization Error',
+        message: (err as Error)?.message || 'Failed to authorize reversal',
+      });
+    }
+  };
+
   // Reload action for conflict or simulated new items
   const handleReload = async () => {
     setIsLoading(true);
@@ -681,6 +759,20 @@ export const ExceptionsView: React.FC = () => {
 
             <button
               type="button"
+              onClick={() => handleTabChange('FRAUD_WATCH')}
+              className={clsx(
+                'px-2.5 py-1 rounded font-semibold transition-colors flex items-center gap-1',
+                activeTab === 'FRAUD_WATCH'
+                  ? 'bg-rose-600 text-white shadow-xs'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              )}
+            >
+              <ShieldAlert className="w-3.5 h-3.5 text-rose-500" />
+              <span>Abuse Watch</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => handleTabChange('MY_CASES')}
               className={clsx(
                 'px-2.5 py-1 rounded font-semibold transition-colors',
@@ -784,6 +876,14 @@ export const ExceptionsView: React.FC = () => {
             >
               Export Selected
             </Button>
+            <Button
+              size="xs"
+              variant="primary"
+              onClick={() => setIsBatchReversalModalOpen(true)}
+              leftIcon={<Layers className="w-3 h-3" />}
+            >
+              Batch Reversal ({checkedIds.length})
+            </Button>
           </div>
         </div>
       )}
@@ -879,6 +979,11 @@ export const ExceptionsView: React.FC = () => {
                   {/* Classification Code & Source */}
                   <th scope="col" className="px-3 py-2">
                     Code / Source
+                  </th>
+
+                  {/* Abuse Risk */}
+                  <th scope="col" className="px-3 py-2">
+                    Abuse Risk
                   </th>
 
                   {/* Exception Reference & Root Cause */}
@@ -1028,6 +1133,25 @@ export const ExceptionsView: React.FC = () => {
                         </div>
                       </td>
 
+                      {/* Customer Dispute Abuse Risk Badge */}
+                      <td
+                        className="px-3 py-2 whitespace-nowrap"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <DisputeAbuseBadge
+                          profile={
+                            exc.disputeAbuseProfile ||
+                            calculateDisputeAbuseProfile({
+                              amount: exc.amount,
+                              channel: exc.channel,
+                              repeatContactCount: exc.repeatContactCount,
+                            })
+                          }
+                          onClick={() => setSelectedAbuseException(exc)}
+                          compact
+                        />
+                      </td>
+
                       {/* Reference & Root Cause */}
                       <td className="px-3 py-2 max-w-xs">
                         <div className="font-mono-financial font-bold text-[13px] text-[var(--text-primary)] flex items-center gap-1.5">
@@ -1137,6 +1261,15 @@ export const ExceptionsView: React.FC = () => {
                               Claim
                             </Button>
                           )}
+                          {exc.status === 'approval' && (role === 'SUPERVISOR_CHECKER' || role === 'ADMIN') && (
+                            <Button
+                              size="xs"
+                              variant="primary"
+                              onClick={() => setSelectedMakerCheckerException(exc)}
+                            >
+                              Dual Auth
+                            </Button>
+                          )}
                           <Button
                             size="xs"
                             variant="ghost"
@@ -1210,6 +1343,45 @@ export const ExceptionsView: React.FC = () => {
       <KeyboardShortcutsModal
         isOpen={isShortcutsModalOpen}
         onClose={() => setIsShortcutsModalOpen(false)}
+      />
+
+      {/* Part 2: Dispute Abuse Risk Dossier Modal */}
+      {selectedAbuseException && (
+        <DisputeAbuseModal
+          isOpen={selectedAbuseException !== null}
+          onClose={() => setSelectedAbuseException(null)}
+          exception={selectedAbuseException}
+          profile={
+            selectedAbuseException.disputeAbuseProfile ||
+            calculateDisputeAbuseProfile({
+              amount: selectedAbuseException.amount,
+              channel: selectedAbuseException.channel,
+              repeatContactCount: selectedAbuseException.repeatContactCount,
+            })
+          }
+          onAddAuditNote={(note) => handleAddNote(selectedAbuseException.id, note)}
+        />
+      )}
+
+      {/* Part 2: Maker-Checker Dual-Control Authorization Modal */}
+      {selectedMakerCheckerException && (
+        <MakerCheckerAuthorizationModal
+          isOpen={selectedMakerCheckerException !== null}
+          onClose={() => setSelectedMakerCheckerException(null)}
+          exception={selectedMakerCheckerException}
+          currentRole={role}
+          currentUserId="supervisor.checker@wema.ng"
+          onConfirmAuthorization={handleConfirmDualControlAuth}
+        />
+      )}
+
+      {/* Part 2: Governed Batch Reversal Processing Modal */}
+      <BatchReversalModal
+        isOpen={isBatchReversalModalOpen}
+        onClose={() => setIsBatchReversalModalOpen(false)}
+        exceptions={exceptions.filter((e) => checkedIds.includes(e.id))}
+        currentRole={role}
+        onExecuteBatch={handleExecuteBatchReversals}
       />
     </div>
   );

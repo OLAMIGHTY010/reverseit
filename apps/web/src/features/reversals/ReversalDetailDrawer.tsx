@@ -11,6 +11,8 @@ import {
 import { Button } from '../../components/Button';
 import { StatusBadge } from '../../components/StatusBadge';
 import { MaskedField } from '../../components/MaskedField';
+import { getMakerCheckerPolicy, calculateDisputeAbuseProfile } from '../fraud/DisputeAbuseEngine';
+import { DisputeAbuseBadge } from '../fraud/DisputeAbuseBadge';
 import type { ReversalDetailRecord } from '../../types/domain';
 
 export interface ReversalDetailDrawerProps {
@@ -29,6 +31,12 @@ export const ReversalDetailDrawer: React.FC<ReversalDetailDrawerProps> = ({
   isChecker,
 }) => {
   if (!isOpen || !detail) return null;
+
+  const policy = getMakerCheckerPolicy(detail.reversalAmount, detail.currency);
+  const abuse = detail.abuseProfile || calculateDisputeAbuseProfile({
+    amount: detail.reversalAmount,
+    channel: detail.channel,
+  });
 
   return (
     <div
@@ -69,21 +77,30 @@ export const ReversalDetailDrawer: React.FC<ReversalDetailDrawerProps> = ({
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5 text-[13px]">
-          {/* Amount & Policy Limit Bar */}
-          <div className="p-4 bg-[var(--canvas-subdued)] border border-[var(--surface-border)] rounded-md flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">
-                Total Reversal Exposure
-              </span>
-              <div className="text-[22px] font-bold font-mono-financial text-[var(--text-primary)]">
-                {detail.currency} {Number(detail.reversalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+          {/* Amount & Maker-Checker Tier Bar */}
+          <div className="p-4 bg-[var(--canvas-subdued)] border border-[var(--surface-border)] rounded-md space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <span className="text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider block">
+                  Total Reversal Exposure
+                </span>
+                <div className="text-[22px] font-bold font-mono-financial text-[var(--text-primary)]">
+                  {detail.currency} {Number(detail.reversalAmount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <DisputeAbuseBadge profile={abuse} compact />
+                <span className="px-2 py-0.5 rounded font-mono-financial text-[11px] font-bold bg-purple-100 text-purple-900 border border-purple-300">
+                  {policy.tier.replace(/_/g, ' ')}
+                </span>
               </div>
             </div>
 
-            <div className="text-right text-[11px] font-mono-financial">
-              <span className="text-[var(--text-muted)] block">Policy Threshold Limit:</span>
-              <span className="font-semibold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
-                Within Analyst Limit (₦2,000,000.00)
+            <div className="pt-2 border-t border-[var(--surface-border-subtle)] text-[11px] text-[var(--text-secondary)] font-mono-financial flex items-center justify-between">
+              <span>{policy.policyDescription}</span>
+              <span className="font-semibold text-emerald-800">
+                {policy.requiresChecker ? 'Dual Sign-Off Mandatory' : 'Single Analyst Authorized'}
               </span>
             </div>
           </div>
