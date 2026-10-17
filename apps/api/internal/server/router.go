@@ -47,6 +47,7 @@ func NewRouter(o Options) http.Handler {
 	r.MethodNotAllowed(httpx.MethodNotAllowed)
 
 	r.Use(observability.TraceMiddleware)
+	r.Use(corsMiddleware)
 	r.Use(observability.RequestLogger(o.Logger))
 	r.Use(observability.MetricsMiddleware(observability.DefaultRegistry))
 	r.Use(recoverer(o.Logger))
@@ -228,4 +229,20 @@ func recoverer(logger *slog.Logger) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, X-CSRF-Token, Idempotency-Key, X-Requested-With, X-Tenant-ID")
+		w.Header().Set("Access-Control-Expose-Headers", "Link, X-Total-Count, Idempotency-Replayed")
+		w.Header().Set("Access-Control-Max-Age", "300")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
