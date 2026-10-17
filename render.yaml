@@ -5,62 +5,26 @@ databases:
   - name: smartreversal-db
     databaseName: smartreversal_db
     user: smartreversal_app
-    plan: standard
+    plan: starter
 
 services:
   # ----------------------------------------------------------------------------
-  # Redis Cache & Broker
+  # Redis / Key-Value Cache & Broker
   # ----------------------------------------------------------------------------
-  - type: redis
+  - type: keyvalue
     name: smartreversal-redis
     plan: starter
     maxmemoryPolicy: allkeys-lru
     ipAllowList: [] # internal access only
 
   # ----------------------------------------------------------------------------
-  # Database Migrations Runner (Runs on deploy before API starts)
-  # ----------------------------------------------------------------------------
-  - type: worker
-    name: smartreversal-migrate
-    runtime: docker
-    dockerfilePath: ./infra/docker/Dockerfile.api
-    dockerCommand: /app/migrate up
-    autoDeploy: true
-    envVars:
-      - key: ENVIRONMENT
-        value: production
-      - key: LOG_LEVEL
-        value: info
-      - key: DB_HOST
-        fromDatabase:
-          name: smartreversal-db
-          property: host
-      - key: DB_PORT
-        fromDatabase:
-          name: smartreversal-db
-          property: port
-      - key: DB_USER
-        fromDatabase:
-          name: smartreversal-db
-          property: user
-      - key: DB_PASSWORD
-        fromDatabase:
-          name: smartreversal-db
-          property: password
-      - key: DB_NAME
-        fromDatabase:
-          name: smartreversal-db
-          property: database
-      - key: DB_SSLMODE
-        value: require
-
-  # ----------------------------------------------------------------------------
-  # Core Go API Server
+  # Core Go API Server (Runs migrations via preDeployCommand before start)
   # ----------------------------------------------------------------------------
   - type: web
     name: smartreversal-api
     runtime: docker
     dockerfilePath: ./infra/docker/Dockerfile.api
+    preDeployCommand: /app/migrate up
     dockerCommand: /app/api
     healthCheckPath: /v1/ready
     autoDeploy: true
@@ -95,12 +59,12 @@ services:
         value: require
       - key: REDIS_HOST
         fromService:
-          type: redis
+          type: keyvalue
           name: smartreversal-redis
           property: host
       - key: REDIS_PORT
         fromService:
-          type: redis
+          type: keyvalue
           name: smartreversal-redis
           property: port
       - key: FINANCIAL_EXECUTION_ENABLED
@@ -160,12 +124,12 @@ services:
         value: require
       - key: REDIS_HOST
         fromService:
-          type: redis
+          type: keyvalue
           name: smartreversal-redis
           property: host
       - key: REDIS_PORT
         fromService:
-          type: redis
+          type: keyvalue
           name: smartreversal-redis
           property: port
       - key: FINANCIAL_EXECUTION_ENABLED
@@ -191,10 +155,11 @@ services:
           property: connectionString
 
   # ----------------------------------------------------------------------------
-  # React / Vite Web Operations Console
+  # React / Vite Web Operations Console (Static Site on Render)
   # ----------------------------------------------------------------------------
-  - type: static
+  - type: web
     name: smartreversal-web
+    runtime: static
     buildCommand: npm install && npm run build:web
     staticPublishPath: apps/web/dist
     autoDeploy: true
@@ -202,14 +167,3 @@ services:
       - type: rewrite
         source: /*
         destination: /index.html
-    envVars:
-      - key: VITE_API_BASE_URL
-        fromService:
-          type: web
-          name: smartreversal-api
-          property: host
-      - key: VITE_AI_SERVICE_URL
-        fromService:
-          type: web
-          name: smartreversal-ai
-          property: host
