@@ -45,6 +45,7 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
   onDisputeCreated,
 }) => {
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage>('yo');
+  const [voiceCadence, setVoiceCadence] = useState<'ultra-clear' | 'natural' | 'brisk'>('ultra-clear');
   const [isRecording, setIsRecording] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [activeSpeechText, setActiveSpeechText] = useState('');
@@ -54,6 +55,12 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
   const [presetStep, setPresetStep] = useState<number>(0);
 
   const dialogueEndRef = useRef<HTMLDivElement>(null);
+
+  const getSpeechRate = () => {
+    if (voiceCadence === 'ultra-clear') return 0.85;
+    if (voiceCadence === 'natural') return 0.92;
+    return 1.02;
+  };
 
   // Initialize initial greeting when modal opens or language changes
   useEffect(() => {
@@ -74,12 +81,31 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
     setPresetStep(0);
     setActivePreset(null);
 
-    // Speak initial greeting aloud
+    // Speak initial greeting aloud with deliberate articulation & boost
     setIsAiSpeaking(true);
-    speakNativeVoice(langInfo.greetingPrompt, selectedLanguage, () => {
-      setIsAiSpeaking(false);
-    });
+    speakNativeVoice(
+      langInfo.greetingPrompt,
+      selectedLanguage,
+      { rate: getSpeechRate(), pitch: 1.06, volume: 1.0 },
+      () => {
+        setIsAiSpeaking(false);
+      }
+    );
   }, [isOpen, selectedLanguage]);
+
+  const handleSoundCheck = () => {
+    const langInfo = SUPPORTED_LANGUAGES[selectedLanguage];
+    window.speechSynthesis?.cancel();
+    setIsAiSpeaking(true);
+    speakNativeVoice(
+      langInfo.greetingPrompt,
+      selectedLanguage,
+      { rate: getSpeechRate(), pitch: 1.06, volume: 1.0 },
+      () => {
+        setIsAiSpeaking(false);
+      }
+    );
+  };
 
   useEffect(() => {
     dialogueEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -117,11 +143,16 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
       };
       nextDialogue.push(aiTurn);
 
-      // Play AI voice reply in native language
+      // Play AI voice reply in native language with deliberate articulation & boost
       setIsAiSpeaking(true);
-      speakNativeVoice(analysis.suggestedPrompt.prompt, selectedLanguage, () => {
-        setIsAiSpeaking(false);
-      });
+      speakNativeVoice(
+        analysis.suggestedPrompt.prompt,
+        selectedLanguage,
+        { rate: getSpeechRate(), pitch: 1.06, volume: 1.0 },
+        () => {
+          setIsAiSpeaking(false);
+        }
+      );
     }
 
     setDialogueHistory(nextDialogue);
@@ -272,32 +303,81 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
         </div>
 
         {/* Language Selector Bar */}
-        <div className="px-4 py-2.5 bg-[var(--surface)] border-b border-[var(--surface-border-subtle)] flex items-center gap-1.5 overflow-x-auto text-[12px]">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)] shrink-0 mr-1">
-            Language:
-          </span>
-          {(Object.keys(SUPPORTED_LANGUAGES) as SupportedLanguage[]).map((langKey) => {
-            const l = SUPPORTED_LANGUAGES[langKey];
-            const isSelected = selectedLanguage === langKey;
-            return (
-              <button
-                key={langKey}
-                onClick={() => {
-                  setSelectedLanguage(langKey);
-                  window.speechSynthesis?.cancel();
-                }}
-                className={clsx(
-                  'px-3 py-1 rounded-full text-[12px] font-bold flex items-center gap-1.5 shrink-0 transition-all',
-                  isSelected
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'bg-[var(--canvas-subdued)] border border-[var(--surface-border-subtle)] text-[var(--text-secondary)] hover:border-emerald-400'
-                )}
-              >
-                <span>{l.flag}</span>
-                <span>{l.nativeName}</span>
-              </button>
-            );
-          })}
+        <div className="px-4 py-2.5 bg-[var(--surface)] border-b border-[var(--surface-border-subtle)] flex items-center justify-between gap-2 overflow-x-auto text-[12px]">
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)] shrink-0 mr-1">
+              Language:
+            </span>
+            {(Object.keys(SUPPORTED_LANGUAGES) as SupportedLanguage[]).map((langKey) => {
+              const l = SUPPORTED_LANGUAGES[langKey];
+              const isSelected = selectedLanguage === langKey;
+              return (
+                <button
+                  key={langKey}
+                  onClick={() => {
+                    setSelectedLanguage(langKey);
+                    window.speechSynthesis?.cancel();
+                  }}
+                  className={clsx(
+                    'px-3 py-1 rounded-full text-[12px] font-bold flex items-center gap-1.5 shrink-0 transition-all',
+                    isSelected
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'bg-[var(--canvas-subdued)] border border-[var(--surface-border-subtle)] text-[var(--text-secondary)] hover:border-emerald-400'
+                  )}
+                >
+                  <span>{l.flag}</span>
+                  <span>{l.nativeName}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Voice Clarity & Sound Check Bar */}
+        <div className="px-4 py-2 bg-emerald-50/60 dark:bg-emerald-950/40 border-b border-[var(--surface-border-subtle)] flex items-center justify-between gap-3 text-[11px] overflow-x-auto">
+          <div className="flex items-center gap-2.5 shrink-0">
+            <button
+              onClick={handleSoundCheck}
+              className="px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-xs transition-all active:scale-95"
+              title="Test the crystal clear pronunciation of the selected language"
+            >
+              <Volume2 className={clsx('w-3.5 h-3.5', isAiSpeaking && 'animate-bounce')} />
+              <span>Test Clear Voice 🔊</span>
+            </button>
+
+            <span className="text-[10px] text-[var(--text-muted)] font-medium hidden sm:inline">
+              Pacing / Cadence:
+            </span>
+
+            {/* Cadence Pills */}
+            <div className="flex items-center bg-[var(--surface)] border border-[var(--surface-border-subtle)] rounded-full p-0.5 text-[10px] font-bold">
+              {(
+                [
+                  { id: 'ultra-clear', label: '0.85x Ultra-Clear' },
+                  { id: 'natural', label: '0.92x Natural' },
+                  { id: 'brisk', label: '1.0x Normal' },
+                ] as const
+              ).map((mode) => (
+                <button
+                  key={mode.id}
+                  onClick={() => setVoiceCadence(mode.id)}
+                  className={clsx(
+                    'px-2 py-0.5 rounded-full transition-all',
+                    voiceCadence === mode.id
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                  )}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 text-[10px] text-emerald-800 dark:text-emerald-300 font-mono-financial shrink-0">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>100% Vol • Acoustic Boost • Phonetic Tuning Active</span>
+          </div>
         </div>
 
         {/* Real-Time Mandatory Slot Tracker */}
@@ -380,10 +460,16 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
 
                   {!isCustomer && (
                     <button
-                      onClick={() => speakNativeVoice(turn.audioText, turn.language)}
-                      className="pt-1 flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
+                      onClick={() =>
+                        speakNativeVoice(turn.audioText, turn.language, {
+                          rate: getSpeechRate(),
+                          pitch: 1.06,
+                          volume: 1.0,
+                        })
+                      }
+                      className="pt-1 flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline"
                     >
-                      <Volume2 className="w-3.5 h-3.5" /> Listen again in {SUPPORTED_LANGUAGES[turn.language].nativeName}
+                      <Volume2 className="w-3.5 h-3.5" /> Replay in HD {SUPPORTED_LANGUAGES[turn.language].nativeName} (Sharp & Loud)
                     </button>
                   )}
                 </div>

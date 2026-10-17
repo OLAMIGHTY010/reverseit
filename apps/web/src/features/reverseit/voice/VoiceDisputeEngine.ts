@@ -441,28 +441,302 @@ export function analyzeVoiceUtterance(
 }
 
 /**
- * Speech Synthesis Helper (Native Browser Voice with Accents)
+ * Phonetic Normalizer for African & Regional Languages
+ * Converts diacritics and complex tone marks into crisp, articulate phonetic equivalents
+ * that speech synthesis engines pronounce smoothly without choking or skipping syllables.
  */
-export function speakNativeVoice(text: string, language: SupportedLanguage, onEnd?: () => void): void {
+export function normalizeTextForSpeech(text: string, language: SupportedLanguage): string {
+  if (!text) return '';
+
+  if (language === 'yo') {
+    return text
+      // Convert specific Yoruba words to their natural phonetic sound
+      .replace(/Ẹ kúnlẹ̀ o/gi, 'E kuunle o')
+      .replace(/Ẹ jọ̀wọ́/gi, 'E jowo')
+      .replace(/ẹ jọ̀wọ́/gi, 'e jowo')
+      .replace(/Ẹ ṣeun púpọ̀/gi, 'E sheun pupo')
+      .replace(/ẹ ṣeun púpọ̀/gi, 'e sheun pupo')
+      .replace(/Ẹ ṣeun/gi, 'E sheun')
+      .replace(/ẹ ṣeun/gi, 'e sheun')
+      .replace(/ṣẹlẹ̀/gi, 'shele')
+      .replace(/ìṣẹ̀lẹ̀/gi, 'ishele')
+      .replace(/ẹ̀sùn/gi, 'esun')
+      .replace(/ẹjọ́ yìí/gi, 'ejo yii')
+      .replace(/ẹjọ́/gi, 'ejo')
+      .replace(/ọ̀rọ̀/gi, 'oro')
+      .replace(/kúlẹ̀kúlẹ̀/gi, 'kulekule')
+      .replace(/kíákíá/gi, 'kiakia')
+      .replace(/àtúnṣe/gi, 'atunshe')
+      .replace(/láàárín/gi, 'laa-arin')
+      .replace(/wákàtí/gi, 'wakati')
+      .replace(/sílẹ̀/gi, 'sile')
+      .replace(/nọ́mbà/gi, 'namba')
+      .replace(/àkọ́ọ́lẹ̀/gi, 'akoo-le')
+      .replace(/mẹ́rinlelogun/gi, 'merin lelogun')
+      .replace(/fóònù/gi, 'foonu')
+      .replace(/ìfowóránṣẹ́/gi, 'ifoworanshe')
+      .replace(/ìfidánilójú/gi, 'ifidaniloju')
+      .replace(/kẹ́kẹ́/gi, 'keke')
+      .replace(/ogbọ̀n/gi, 'ogbon')
+      .replace(/ẹgbẹrun/gi, 'egberun')
+      .replace(/ogún/gi, 'ogun')
+      .replace(/mẹ́wàá/gi, 'mewaa')
+      .replace(/aadọta/gi, 'aadota')
+      .replace(/bánkì/gi, 'banki')
+      .replace(/ṣùgbọ́n/gi, 'sugbon')
+      .replace(/ṣe/gi, 'she')
+      .replace(/ṣ/g, 'sh')
+      .replace(/Ṣ/g, 'Sh')
+      // Normalize combined diacritics
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // remove tone diacritics
+      .replace(/ẹ/gi, 'e')
+      .replace(/ọ/gi, 'o');
+  }
+
+  if (language === 'ha') {
+    return text
+      .replace(/sa'o'i/gi, 'sa-o-i')
+      .replace(/na'ura/gi, 'na-ura')
+      .replace(/na'urar/gi, 'na-urar')
+      .replace(/kudin ku/gi, 'kudin ku')
+      .replace(/tantancewa/gi, 'tantancewa')
+      .replace(/ƙ/g, 'k')
+      .replace(/Ƙ/g, 'K')
+      .replace(/ɗ/g, 'd')
+      .replace(/Ɗ/g, 'D')
+      .replace(/ɓ/g, 'b')
+      .replace(/Ɓ/g, 'B')
+      .replace(/ƴ/g, 'y')
+      .replace(/Ƴ/g, 'Y')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  }
+
+  if (language === 'ig') {
+    return text
+      .replace(/nọmba/gi, 'namba')
+      .replace(/akaụntụ/gi, 'akauntu')
+      .replace(/abụọ/gi, 'abuo')
+      .replace(/atọ/gi, 'ato')
+      .replace(/anọ/gi, 'ano')
+      .replace(/daalụ nke ukwuu/gi, 'daalu nke ukwuu')
+      .replace(/daalụ/gi, 'daalu')
+      .replace(/ụlọ akụ/gi, 'ulo aku')
+      .replace(/kedu/gi, 'kedu')
+      .replace(/kọwaa/gi, 'kowa')
+      .replace(/kpọmkwem/gi, 'kpomkwem')
+      .replace(/na-ewepụtaghị/gi, 'na-eweputaghi')
+      .replace(/nkọwa/gi, 'nkowa')
+      .replace(/ekwentị/gi, 'ekwenti')
+      .replace(/ọ/g, 'o')
+      .replace(/Ọ/g, 'O')
+      .replace(/ụ/g, 'u')
+      .replace(/Ụ/g, 'U')
+      .replace(/ị/g, 'i')
+      .replace(/Ị/g, 'I')
+      .replace(/ṅ/g, 'n')
+      .replace(/Ṅ/g, 'N')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+  }
+
+  if (language === 'pcm') {
+    return text
+      .replace(/sey/gi, 'say')
+      .replace(/abeg/gi, 'ah-beg')
+      .replace(/wetin/gi, 'weh-tin')
+      .replace(/dey/gi, 'dey')
+      .replace(/comot/gi, 'comot')
+      .replace(/sharp sharp/gi, 'sharp sharp');
+  }
+
+  if (language === 'fr') {
+    return text
+      .replace(/[’']/g, "'")
+      .replace(/[«»]/g, '"')
+      .replace(/distributeur TPE/gi, 'terminal TPE');
+  }
+
+  return text;
+}
+
+/**
+ * Wakes up audio DAC, laptop speakers, and Bluetooth receivers with an ultra-short,
+ * pleasant acoustic warm-up tone so that the first spoken word is never truncated.
+ */
+export function wakeUpAudioDevice(): void {
+  try {
+    if (typeof window === 'undefined') return;
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5 clean tone
+    osc.frequency.exponentialRampToValueAtTime(783.99, ctx.currentTime + 0.05); // G5
+
+    gain.gain.setValueAtTime(0.04, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.05);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.06);
+  } catch {
+    // safe fallback
+  }
+}
+
+/**
+ * Queries the browser speech engine and selects the highest-clarity,
+ * most articulate neural / natural voice available.
+ */
+export function findBestVoiceForLanguage(language: SupportedLanguage): SpeechSynthesisVoice | null {
+  if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices || voices.length === 0) return null;
+
+  const langInfo = SUPPORTED_LANGUAGES[language];
+  const targetCode = langInfo.speechCode.toLowerCase().replace(/_/g, '-');
+  const langPrefix = language.toLowerCase();
+
+  // 1. Direct language code match (e.g. 'yo-ng', 'ha-ng', 'fr-fr', 'en-ng')
+  let matched = voices.find(
+    (v) =>
+      v.lang.toLowerCase().replace(/_/g, '-') === targetCode ||
+      v.lang.toLowerCase().startsWith(langPrefix) ||
+      v.name.toLowerCase().includes(langInfo.name.toLowerCase())
+  );
+  if (matched) return matched;
+
+  // 2. For African languages (Yoruba, Hausa, Igbo, Pidgin), prioritize Nigerian / African English accents
+  if (['yo', 'ha', 'ig', 'pcm'].includes(language)) {
+    matched = voices.find(
+      (v) =>
+        v.lang.toLowerCase().includes('en-ng') ||
+        v.name.toLowerCase().includes('nigeria') ||
+        v.name.toLowerCase().includes('ekele') ||
+        v.name.toLowerCase().includes('african')
+    );
+    if (matched) return matched;
+
+    // 3. Fallback to British / Commonwealth Natural/Neural voices (pronounces open vowels sharply)
+    matched = voices.find(
+      (v) =>
+        (v.name.includes('Natural') ||
+          v.name.includes('Neural') ||
+          v.name.includes('Google') ||
+          v.name.includes('Online')) &&
+        (v.lang.includes('en-GB') || v.lang.includes('en-ZA') || v.lang.includes('en-IE'))
+    );
+    if (matched) return matched;
+
+    // 4. Any UK English voice
+    matched = voices.find((v) => v.lang.toLowerCase().includes('en-gb'));
+    if (matched) return matched;
+  }
+
+  // 5. For French, pick best French neural voice
+  if (language === 'fr') {
+    matched = voices.find(
+      (v) =>
+        v.lang.toLowerCase().startsWith('fr') &&
+        (v.name.includes('Natural') ||
+          v.name.includes('Neural') ||
+          v.name.includes('Google') ||
+          v.name.includes('Hortense') ||
+          v.name.includes('Julie'))
+    );
+    if (matched) return matched;
+    matched = voices.find((v) => v.lang.toLowerCase().startsWith('fr'));
+    if (matched) return matched;
+  }
+
+  // 6. Find any Natural / Neural English voice
+  matched = voices.find(
+    (v) =>
+      v.lang.toLowerCase().startsWith('en') &&
+      (v.name.includes('Natural') ||
+        v.name.includes('Neural') ||
+        v.name.includes('Google') ||
+        v.name.includes('Jenny') ||
+        v.name.includes('Sonia'))
+  );
+  if (matched) return matched;
+
+  // 7. Fallback to browser default
+  return voices.find((v) => v.default) || voices[0] || null;
+}
+
+export interface SpeechOptions {
+  rate?: number;
+  pitch?: number;
+  volume?: number;
+}
+
+/**
+ * Speech Synthesis Helper (Native Browser Voice with Accents and Clarity Normalization)
+ */
+export function speakNativeVoice(
+  text: string,
+  language: SupportedLanguage,
+  optionsOrOnEnd?: SpeechOptions | (() => void),
+  onEndCallback?: () => void
+): void {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-    if (onEnd) onEnd();
+    if (typeof optionsOrOnEnd === 'function') optionsOrOnEnd();
+    if (onEndCallback) onEndCallback();
     return;
   }
 
+  const options: SpeechOptions =
+    typeof optionsOrOnEnd === 'object' ? optionsOrOnEnd : {};
+  const onEnd = typeof optionsOrOnEnd === 'function' ? optionsOrOnEnd : onEndCallback;
+
+  // Cancel any ongoing speech
   window.speechSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
+
+  // Acoustic wake-up for speaker hardware
+  wakeUpAudioDevice();
+
+  // Normalize phonetic text so African tone diacritics don't choke the synthesizer
+  const speechText = normalizeTextForSpeech(text, language);
+  const utterance = new SpeechSynthesisUtterance(speechText);
   const langInfo = SUPPORTED_LANGUAGES[language];
 
-  utterance.lang = langInfo.speechCode;
-  utterance.rate = 0.95; // Slightly measured for clear accessibility
-  utterance.pitch = 1.0;
+  // Rate: 0.88 for African languages ensures articulate, deliberate delivery so words are crystal clear and sharp
+  const defaultRate = ['yo', 'ha', 'ig', 'pcm'].includes(language) ? 0.88 : 0.94;
+  const rate = options.rate ?? defaultRate;
+  const pitch = options.pitch ?? 1.06; // 1.06 provides bright, sharp treble clarity
+  const volume = options.volume ?? 1.0; // 100% volume for maximum loudness and audibility
+
+  utterance.rate = rate;
+  utterance.pitch = pitch;
+  utterance.volume = volume;
+
+  const bestVoice = findBestVoiceForLanguage(language);
+  if (bestVoice) {
+    utterance.voice = bestVoice;
+    // Set utterance.lang to match the chosen voice's language so the browser engine doesn't reject or distort it
+    utterance.lang = bestVoice.lang || langInfo.speechCode;
+  } else {
+    utterance.lang = langInfo.speechCode;
+  }
 
   if (onEnd) {
     utterance.onend = () => onEnd();
     utterance.onerror = () => onEnd();
   }
 
-  window.speechSynthesis.speak(utterance);
+  setTimeout(() => {
+    window.speechSynthesis.speak(utterance);
+  }, 70);
 }
 
 /**

@@ -5,6 +5,7 @@ import {
   extractLocationOrBank,
   extractAccountOrPhone,
   analyzeVoiceUtterance,
+  normalizeTextForSpeech,
   SLOT_INTERROGATION_PROMPTS,
   SUPPORTED_LANGUAGES,
 } from '../features/reverseit/voice/VoiceDisputeEngine';
@@ -149,6 +150,67 @@ describe('Multilingual Voice Dispute Intake & Conversational Slot Engine', () =>
         expect(lang.greetingPrompt).toBeTruthy();
         expect(lang.flag).toBeTruthy();
       }
+    });
+  });
+
+  describe('Phonetic Normalization for Crystal-Clear Speech Articulation', () => {
+    it('should normalize Yoruba diacritics and tone marks into crisp phonetic syllables', () => {
+      const greeting = 'Ẹ kúnlẹ̀ o. Ẹ jọ̀wọ́ sọ ohun tí ó ṣẹlẹ̀ sí owó yín...';
+      const normalized = normalizeTextForSpeech(greeting, 'yo');
+
+      expect(normalized).toContain('E kuunle o');
+      expect(normalized).toContain('E jowo');
+      expect(normalized).toContain('shele');
+      expect(normalized).toContain('owo yin');
+      // No combining diacritics remaining
+      expect(normalized).not.toMatch(/[\u0300-\u036f]/);
+    });
+
+    it('should normalize Yoruba banking terms cleanly', () => {
+      const bankPhrase = 'Nọ́mbà àkọ́ọ́lẹ̀ yín fún ìfidánilójú ní bánkì';
+      const normalized = normalizeTextForSpeech(bankPhrase, 'yo');
+
+      expect(normalized).toContain('namba');
+      expect(normalized).toContain('akoo-le');
+      expect(normalized).toContain('ifidaniloju');
+      expect(normalized).toContain('banki');
+    });
+
+    it('should normalize Hausa hooked letters and glottal apostrophe pauses', () => {
+      const hausaText = "Na'urar ba ta bada kuɗi ba a cikin sa'o'i ashirin da huɗu ƙarin bayani";
+      const normalized = normalizeTextForSpeech(hausaText, 'ha');
+
+      expect(normalized).toContain('na-urar');
+      expect(normalized).toContain('sa-o-i');
+      expect(normalized).toContain('kudi'); // ɗ -> d
+      expect(normalized).toContain('karin'); // ƙ -> k
+    });
+
+    it('should normalize Igbo sub-dot vowels and key loanwords', () => {
+      const igboText = 'Nnọọ. Biko kọwaa nọmba akaụntụ gị maka nkwenye na ụlọ akụ';
+      const normalized = normalizeTextForSpeech(igboText, 'ig');
+
+      expect(normalized).toContain('namba');
+      expect(normalized).toContain('akauntu');
+      expect(normalized).toContain('ulo aku');
+      expect(normalized).not.toMatch(/[ọụịṅ]/);
+    });
+
+    it('should normalize Pidgin conversational cadence terms', () => {
+      const pidginText = 'Abeg wetin happen to your money sharp sharp';
+      const normalized = normalizeTextForSpeech(pidginText, 'pcm');
+
+      expect(normalized).toContain('ah-beg');
+      expect(normalized).toContain('weh-tin');
+      expect(normalized).toContain('sharp sharp');
+    });
+
+    it('should clean French typographical quotes and entities', () => {
+      const frenchText = "J'ai tenté d’utiliser le distributeur TPE";
+      const normalized = normalizeTextForSpeech(frenchText, 'fr');
+
+      expect(normalized).toContain("d'utiliser");
+      expect(normalized).toContain('terminal TPE');
     });
   });
 });
