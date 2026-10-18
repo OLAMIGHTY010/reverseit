@@ -64,7 +64,7 @@ export const CustomerShell: React.FC<CustomerShellProps> = ({ children }) => {
             >
               <Lock className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
               <span className="hidden sm:inline">Bank Staff Portal</span>
-              <span className="sm:hidden font-medium">Staff Portal</span>
+              <span className="sm:hidden font-semibold">Staff</span>
             </button>
           </div>
         </div>
