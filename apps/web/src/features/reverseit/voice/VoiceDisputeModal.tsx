@@ -81,7 +81,7 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
     setIsAiSpeaking(false);
   };
 
-  const speakBotMessage = (text: string, lang: SupportedLanguage) => {
+  const speakBotMessage = (text: string, lang: SupportedLanguage, promptKey?: string) => {
     stopVoice();
     setIsAiSpeaking(true);
     const activeConfig: VoiceEngineConfig = {
@@ -89,6 +89,7 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
       speed: getSpeechRate(),
     };
     playUniversalBotVoice(text, lang, activeConfig, {
+      promptKey,
       onStart: () => setIsAiSpeaking(true),
       onEnd: () => setIsAiSpeaking(false),
       onError: () => setIsAiSpeaking(false),
@@ -117,13 +118,13 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
     setPresetStep(0);
     setActivePreset(null);
 
-    // Speak initial greeting aloud with active voice engine
-    speakBotMessage(langInfo.greetingPrompt, selectedLanguage);
+    // Speak initial greeting aloud with active voice engine (Studio Native prompt)
+    speakBotMessage(langInfo.greetingPrompt, selectedLanguage, `greeting_${selectedLanguage}`);
   }, [isOpen, selectedLanguage]);
 
   const handleSoundCheck = () => {
     const langInfo = SUPPORTED_LANGUAGES[selectedLanguage];
-    speakBotMessage(langInfo.greetingPrompt, selectedLanguage);
+    speakBotMessage(langInfo.greetingPrompt, selectedLanguage, `greeting_${selectedLanguage}`);
   };
 
   useEffect(() => {
@@ -162,8 +163,11 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
       };
       nextDialogue.push(aiTurn);
 
-      // Play AI voice reply using active voice engine
-      speakBotMessage(analysis.suggestedPrompt.prompt, selectedLanguage);
+      // Play AI voice reply using Studio Native prompt or active engine
+      const slotPromptKey = analysis.isComplete
+        ? `confirmation_success_${selectedLanguage}`
+        : `slot_${analysis.missingSlot}_${selectedLanguage}`;
+      speakBotMessage(analysis.suggestedPrompt.prompt, selectedLanguage, slotPromptKey);
     }
 
     setDialogueHistory(nextDialogue);

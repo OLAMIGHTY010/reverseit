@@ -82,6 +82,7 @@ export const VoiceEngineSettingsModal: React.FC<VoiceEngineSettingsModalProps> =
         currentLanguage,
         tempConfig,
         {
+          promptKey: `greeting_${currentLanguage}`,
           onStart: () => setTestStatus('Playing audio...'),
           onEnd: () => {
             setIsTestingAudio(false);
