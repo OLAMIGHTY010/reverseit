@@ -56,11 +56,15 @@ export const ReverseItHeader: React.FC<ReverseItHeaderProps> = ({
   return (
     <div className="space-y-4">
       {/* Top action row */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-[var(--surface-border-subtle)]">
-        <div className="flex items-center gap-2 text-[13px]">
-          <span className="font-bold text-[var(--text-primary)]">Dispute Resolution Center</span>
-          <ChevronRight className="w-4 h-4 text-[var(--text-muted)]" />
-          <span className="text-[var(--text-secondary)]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-[var(--surface-border-subtle)]">
+        {/* Breadcrumb row */}
+        <div className="flex items-center gap-1.5 sm:gap-2 text-[12px] sm:text-[13px] min-w-0">
+          <span className="font-bold text-[var(--text-primary)] shrink-0">
+            <span className="hidden sm:inline">Dispute Resolution</span>
+            <span className="sm:hidden">Dispute</span> Center
+          </span>
+          <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
+          <span className="text-[var(--text-secondary)] font-medium truncate">
             {isMyCases
               ? 'My Open Cases'
               : isTracker
@@ -70,18 +74,18 @@ export const ReverseItHeader: React.FC<ReverseItHeaderProps> = ({
         </div>
 
         {/* Quick Search & Actions */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           {/* Quick Track Input */}
           {onQuickTrack && (
-            <form onSubmit={handleSearchSubmit} className="relative flex items-center">
+            <form onSubmit={handleSearchSubmit} className="relative flex-1 sm:w-44 sm:flex-initial min-w-0">
               <input
                 type="text"
                 placeholder="Track Ref / RRN..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-38 sm:w-48 pl-7 pr-2.5 py-1 text-[11px] font-mono rounded-xl bg-[var(--canvas-subdued)] border border-[var(--surface-border)] text-[var(--text-primary)] focus:outline-hidden focus:ring-1 focus:ring-sky-500 transition-all placeholder:text-[var(--text-muted)] placeholder:font-sans"
+                className="w-full pl-7 pr-2.5 py-1.5 text-[11px] font-mono rounded-xl bg-[var(--canvas-subdued)] border border-[var(--surface-border)] text-[var(--text-primary)] focus:outline-hidden focus:ring-1 focus:ring-sky-500 transition-all placeholder:text-[var(--text-muted)] placeholder:font-sans"
               />
-              <Search className="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2 pointer-events-none" />
+              <Search className="w-3.5 h-3.5 text-[var(--text-muted)] absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
             </form>
           )}
 
@@ -90,33 +94,38 @@ export const ReverseItHeader: React.FC<ReverseItHeaderProps> = ({
               variant="secondary"
               size="sm"
               onClick={onOpenVoiceModal}
-              leftIcon={<Mic className="w-3.5 h-3.5 text-emerald-600 animate-pulse" />}
+              className="shrink-0 px-2.5 sm:px-3 text-[11px] sm:text-xs"
+              leftIcon={<Mic className="w-3.5 h-3.5 text-emerald-600 animate-pulse shrink-0" />}
             >
-              <span>Voice Dispute</span>
-              <span className="hidden md:inline text-[10px] text-emerald-600 font-bold ml-1">
+              <span className="whitespace-nowrap">Voice</span>
+              <span className="hidden sm:inline ml-0.5">Dispute</span>
+              <span className="hidden lg:inline text-[10px] text-emerald-600 font-bold ml-1">
                 (Ohùn / Hausa)
               </span>
             </Button>
           )}
+
           {isMyCases || isTracker ? (
             <Button
               variant="primary"
               size="sm"
               onClick={onStartNewReport}
-              leftIcon={<FileText className="w-3.5 h-3.5" />}
+              className="shrink-0 px-2.5 sm:px-3 text-[11px] sm:text-xs whitespace-nowrap"
+              leftIcon={<FileText className="w-3.5 h-3.5 shrink-0" />}
             >
-              Report New Dispute
+              <span>New Dispute</span>
             </Button>
           ) : (
             <Button
               variant="secondary"
               size="sm"
               onClick={onNavigateToMyCases}
-              leftIcon={<Clock className="w-3.5 h-3.5" />}
+              className="shrink-0 px-2.5 sm:px-3 text-[11px] sm:text-xs whitespace-nowrap"
+              leftIcon={<Clock className="w-3.5 h-3.5 shrink-0" />}
             >
               <span>My Cases</span>
               {activeCaseCount > 0 && (
-                <span className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-sky-600 text-white">
+                <span className="ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-sky-600 text-white shrink-0">
                   {activeCaseCount}
                 </span>
               )}
@@ -127,17 +136,18 @@ export const ReverseItHeader: React.FC<ReverseItHeaderProps> = ({
 
       {/* Interactive Progress Stepper for Wizard Flow */}
       {isWizard && (
-        <div className="p-4 bg-[var(--surface)] border border-[var(--surface-border)] rounded-2xl shadow-xs space-y-3">
-          <div className="flex items-center justify-between text-[12px]">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-[var(--text-primary)]">Dispute Progress</span>
-              <span className="text-[11px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-800 font-semibold border border-sky-200">
+        <div className="p-3.5 sm:p-4 bg-[var(--surface)] border border-[var(--surface-border)] rounded-2xl shadow-xs space-y-3">
+          <div className="flex items-center justify-between text-[12px] gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+              <span className="font-bold text-[var(--text-primary)] text-[12px] sm:text-[13px]">Dispute Progress</span>
+              <span className="text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full bg-sky-50 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800 font-semibold border border-sky-200 shrink-0">
                 {progressPercent}% Complete
               </span>
             </div>
-            <div className="flex items-center gap-1.5 text-[11px] text-[var(--text-muted)]">
-              <Shield className="w-3.5 h-3.5 text-emerald-600" />
-              <span>CBN Resolution Guarantee Active</span>
+            <div className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-[11px] text-[var(--text-muted)] truncate justify-end">
+              <Shield className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span className="hidden sm:inline truncate">CBN Resolution Guarantee Active</span>
+              <span className="sm:hidden font-medium text-emerald-700 dark:text-emerald-400 truncate">CBN Guarantee</span>
             </div>
           </div>
 

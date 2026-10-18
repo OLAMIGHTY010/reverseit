@@ -127,7 +127,7 @@ export const S1ReportProblem: React.FC<S1ReportProblemProps> = ({
                 <Mic className="w-7 h-7 animate-pulse" />
               </div>
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[16px] sm:text-[17px] font-extrabold tracking-tight">
                     Speak Your Complaint (Ohùn / Magana / Olu / Français)
                   </span>
