@@ -111,14 +111,14 @@ export const StaleDataBanner: React.FC<StaleDataBannerProps> = ({
   return (
     <div
       className={clsx(
-        'px-4 py-2 bg-amber-50 border border-amber-300 rounded text-amber-950 flex items-center justify-between text-[12px]',
+        'px-3 sm:px-4 py-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 rounded text-amber-950 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[12px]',
         className
       )}
       role="status"
     >
-      <div className="flex items-center gap-2">
-        <ClockAlert className="w-4 h-4 text-amber-700" aria-hidden="true" />
-        <span>
+      <div className="flex items-center gap-2 min-w-0">
+        <ClockAlert className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" aria-hidden="true" />
+        <span className="text-[11px] sm:text-[12px]">
           <strong>Telemetry Cached:</strong> Feed last synchronized at{' '}
           <span className="font-mono-financial font-semibold">{lastUpdated}</span>. Switch polling active.
         </span>
@@ -128,7 +128,7 @@ export const StaleDataBanner: React.FC<StaleDataBannerProps> = ({
           type="button"
           onClick={onRefresh}
           disabled={isRefreshing}
-          className="font-medium underline hover:text-amber-800 cursor-pointer flex items-center gap-1"
+          className="font-medium underline hover:text-amber-800 dark:hover:text-amber-300 cursor-pointer flex items-center gap-1 shrink-0 self-end sm:self-auto text-[11px] sm:text-[12px]"
         >
           <RefreshCw className={clsx('w-3 h-3', isRefreshing && 'animate-spin')} />
           <span>Refresh Now</span>
