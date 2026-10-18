@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sun, Moon, Lock, ShieldCheck } from 'lucide-react';
+import { Sun, Moon, Lock, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { ToastContainer } from '../components/Toast';
 
@@ -8,34 +8,67 @@ export interface CustomerShellProps {
 }
 
 export const CustomerShell: React.FC<CustomerShellProps> = ({ children }) => {
-  const { theme, setTheme, setPortalMode } = useApp();
+  const {
+    theme,
+    setTheme,
+    setPortalMode,
+    goCustomerHome,
+    navigateBackCustomer,
+    canGoBackCustomer,
+  } = useApp();
 
   return (
     <div className="min-h-screen bg-[var(--canvas)] text-[var(--text-primary)] flex flex-col selection:bg-[var(--primary-subtle)] selection:text-[var(--primary)] transition-colors">
       {/* Top Customer Navigation Bar */}
       <header className="sticky top-0 z-30 bg-[var(--surface)] border-b border-[var(--surface-border)] shadow-xs">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 min-h-[56px] sm:h-16 py-2 sm:py-0 flex items-center justify-between gap-2 sm:gap-4">
-          {/* Logo & Brand Identity */}
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <img src="/logo.png" alt="Smart Reversal Logo" className="w-7 h-7 sm:w-8 sm:h-8 object-contain shrink-0" />
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <span className="font-extrabold text-[15px] sm:text-[16px] tracking-tight text-[var(--text-primary)] whitespace-nowrap">
-                  Smart Reversal
-                </span>
-                <span className="hidden sm:inline-flex text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-300 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800 shrink-0">
-                  Customer Portal
-                </span>
+          {/* Left: Back Button (when in sub-page) & Logo Home Button */}
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            {canGoBackCustomer && (
+              <button
+                type="button"
+                onClick={navigateBackCustomer}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-[var(--canvas-subdued)] border border-[var(--surface-border)] text-[var(--text-primary)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-all cursor-pointer shadow-2xs shrink-0"
+                title="Go back to previous page"
+                aria-label="Back to previous page"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden xs:inline">Back</span>
+              </button>
+            )}
+
+            {/* Clickable Brand Logo as Home Button */}
+            <button
+              type="button"
+              onClick={goCustomerHome}
+              className="flex items-center gap-2.5 sm:gap-3 min-w-0 text-left cursor-pointer group focus:outline-none rounded-lg p-1 -m-1 hover:bg-[var(--canvas-subdued)] transition-colors"
+              title="Smart Reversal - Return to Home"
+              aria-label="Smart Reversal Home"
+            >
+              <img
+                src="/logo.png"
+                alt="Smart Reversal Logo"
+                className="w-7 h-7 sm:w-8 sm:h-8 object-contain shrink-0 group-hover:scale-105 transition-transform"
+              />
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 sm:gap-2">
+                  <span className="font-extrabold text-[15px] sm:text-[16px] tracking-tight text-[var(--text-primary)] group-hover:text-[var(--primary)] transition-colors whitespace-nowrap">
+                    Smart Reversal
+                  </span>
+                  <span className="hidden sm:inline-flex text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 border border-sky-300 dark:bg-sky-950/60 dark:text-sky-300 dark:border-sky-800 shrink-0">
+                    Customer Portal
+                  </span>
+                </div>
+                <p className="text-[10px] sm:text-[11px] text-[var(--text-muted)] flex items-center gap-1 sm:gap-1.5 truncate">
+                  <span className="hidden md:inline">Self-Service Dispute & Resolution</span>
+                  <span className="hidden md:inline">&bull;</span>
+                  <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium shrink-0">
+                    <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span className="truncate">CBN Regulatory Protection</span>
+                  </span>
+                </p>
               </div>
-              <p className="text-[10px] sm:text-[11px] text-[var(--text-muted)] flex items-center gap-1 sm:gap-1.5 truncate">
-                <span className="hidden md:inline">Self-Service Dispute & Resolution</span>
-                <span className="hidden md:inline">&bull;</span>
-                <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-medium shrink-0">
-                  <ShieldCheck className="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <span className="truncate">CBN Regulatory Protection</span>
-                </span>
-              </p>
-            </div>
+            </button>
           </div>
 
           {/* Right Controls: Theme Toggle & Bank Staff Access */}

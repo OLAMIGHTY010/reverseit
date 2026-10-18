@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Clock, FileText, Check, Shield, ChevronRight, Search, Mic } from 'lucide-react';
+import { Clock, FileText, Check, Shield, ChevronRight, Search, Mic, ArrowLeft } from 'lucide-react';
 import { Button } from '../../components/Button';
 import type { ReverseItStep } from './reverseitTypes';
 
@@ -10,6 +10,7 @@ export interface ReverseItHeaderProps {
   onStartNewReport: () => void;
   onQuickTrack?: (query: string) => void;
   onOpenVoiceModal?: () => void;
+  onBack?: () => void;
 }
 
 interface StepMilestone {
@@ -33,6 +34,7 @@ export const ReverseItHeader: React.FC<ReverseItHeaderProps> = ({
   onStartNewReport,
   onQuickTrack,
   onOpenVoiceModal,
+  onBack,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const isMyCases = currentStep === 'MY_CASES';
@@ -57,12 +59,30 @@ export const ReverseItHeader: React.FC<ReverseItHeaderProps> = ({
     <div className="space-y-4">
       {/* Top action row */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-[var(--surface-border-subtle)]">
-        {/* Breadcrumb row */}
+        {/* Breadcrumb row with Back Button & Home Link */}
         <div className="flex items-center gap-1.5 sm:gap-2 text-[12px] sm:text-[13px] min-w-0">
-          <span className="font-bold text-[var(--text-primary)] shrink-0">
+          {onBack && currentStep !== 'S1_REPORT_PROBLEM' && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded-lg bg-[var(--canvas-subdued)] hover:bg-[var(--surface-border-subtle)] border border-[var(--surface-border)] text-[var(--text-primary)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all cursor-pointer shrink-0"
+              title="Go back to previous step"
+              aria-label="Back to previous step"
+            >
+              <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+              <span>Back</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={onStartNewReport}
+            className="font-bold text-[var(--text-primary)] hover:text-[var(--primary)] cursor-pointer flex items-center gap-1 transition-colors shrink-0"
+            title="Go to Dispute Center Home"
+          >
             <span className="hidden sm:inline">Dispute Resolution</span>
             <span className="sm:hidden">Dispute</span> Center
-          </span>
+          </button>
           <ChevronRight className="w-3.5 h-3.5 text-[var(--text-muted)] shrink-0" />
           <span className="text-[var(--text-secondary)] font-medium truncate">
             {isMyCases

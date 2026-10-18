@@ -43,6 +43,15 @@ export interface AppContextType {
   logoutStaff: () => void;
   activeView: string;
   setActiveView: (view: string) => void;
+  viewHistory: string[];
+  navigateBack: () => void;
+  canGoBack: boolean;
+  customerStep: string;
+  setCustomerStep: (step: string) => void;
+  customerHistory: string[];
+  navigateBackCustomer: () => void;
+  goCustomerHome: () => void;
+  canGoBackCustomer: boolean;
   globalSearchOpen: boolean;
   setGlobalSearchOpen: (open: boolean) => void;
   sessionTimeoutOpen: boolean;

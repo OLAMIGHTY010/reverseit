@@ -30,9 +30,17 @@ import { apiClient } from '../../services/apiClient';
 import type { FinancialException, Channel } from '../../types/domain';
 
 export const ReverseItView: React.FC = () => {
-  const { addToast } = useApp();
+  const {
+    customerStep,
+    setCustomerStep,
+    navigateBackCustomer,
+    goCustomerHome,
+    canGoBackCustomer,
+    addToast,
+  } = useApp();
 
-  const [currentStep, setCurrentStep] = useState<ReverseItStep>('S1_REPORT_PROBLEM');
+  const currentStep = (customerStep || 'S1_REPORT_PROBLEM') as ReverseItStep;
+  const setCurrentStep = (step: ReverseItStep) => setCustomerStep(step);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [intakeMode, setIntakeMode] = useState<IntakeMode>('PASTE_TEXT');
   const [parsedDetails, setParsedDetails] = useState<ParsedAlertDetails>(
@@ -424,9 +432,10 @@ export const ReverseItView: React.FC = () => {
         currentStep={currentStep}
         activeCaseCount={cases.length}
         onNavigateToMyCases={() => setCurrentStep('MY_CASES')}
-        onStartNewReport={() => setCurrentStep('S1_REPORT_PROBLEM')}
+        onStartNewReport={goCustomerHome}
         onQuickTrack={handleQuickTrack}
         onOpenVoiceModal={() => setIsVoiceModalOpen(true)}
+        onBack={canGoBackCustomer ? navigateBackCustomer : undefined}
       />
 
       {/* Screen Routing */}

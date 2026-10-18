@@ -15,6 +15,7 @@ import {
   Shield,
   Menu,
   X,
+  ArrowLeft,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { useApp } from '../context/AppContext';
@@ -40,6 +41,8 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
     setEnvironment,
     activeView,
     setActiveView,
+    navigateBack,
+    canGoBack,
     setGlobalSearchOpen,
     setSessionTimeoutOpen,
     addToast,
@@ -209,20 +212,45 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
       {/* 2. Top Header Bar (Clean, bright, NOT dark navy or black) */}
       <header className="sticky top-0 z-30 bg-[var(--surface)] border-b border-[var(--surface-border)] shadow-xs">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 min-h-[52px] sm:h-14 py-1.5 sm:py-0 flex items-center justify-between gap-2 sm:gap-4">
-          {/* Logo & Platform Title */}
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 shrink-0">
-            <img src="/logo.png" alt="SMARTREVERSAL Emblem" className="w-7 h-7 sm:w-8 sm:h-8 object-contain shrink-0" />
-            <div className="min-w-0">
-              <div className="font-bold text-[14px] sm:text-[15px] tracking-tight text-[var(--text-primary)] flex items-center gap-1.5">
-                <span className="whitespace-nowrap">SMARTREVERSAL</span>
-                <span className="text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded bg-[var(--canvas-subdued)] border border-[var(--surface-border)] font-mono-financial font-medium text-[var(--text-muted)] shrink-0">
-                  v0.2.0
-                </span>
+          {/* Logo & Platform Title (Clickable Home Button to Dashboard) & Back Button */}
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 shrink-0">
+            {canGoBack && (
+              <button
+                type="button"
+                onClick={navigateBack}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-[var(--canvas-subdued)] border border-[var(--surface-border)] text-[var(--text-primary)] hover:border-[var(--primary)] hover:text-[var(--primary)] transition-all cursor-pointer shadow-2xs shrink-0"
+                title="Go back to previous view"
+                aria-label="Back to previous view"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden xs:inline">Back</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setActiveView('dashboard')}
+              className="flex items-center gap-2.5 sm:gap-3 min-w-0 text-left cursor-pointer group focus:outline-none rounded-lg p-1 -m-1 hover:bg-[var(--canvas-subdued)] transition-colors"
+              title="SMARTREVERSAL - Return to Operations Dashboard (Home)"
+              aria-label="Go to Dashboard Home"
+            >
+              <img
+                src="/logo.png"
+                alt="SMARTREVERSAL Emblem"
+                className="w-7 h-7 sm:w-8 sm:h-8 object-contain shrink-0 group-hover:scale-105 transition-transform"
+              />
+              <div className="min-w-0">
+                <div className="font-bold text-[14px] sm:text-[15px] tracking-tight text-[var(--text-primary)] group-hover:text-[var(--primary)] transition-colors flex items-center gap-1.5">
+                  <span className="whitespace-nowrap">SMARTREVERSAL</span>
+                  <span className="text-[9px] sm:text-[10px] px-1.5 py-0.2 rounded bg-[var(--canvas-subdued)] border border-[var(--surface-border)] font-mono-financial font-medium text-[var(--text-muted)] shrink-0">
+                    v0.2.0
+                  </span>
+                </div>
+                <div className="hidden sm:block text-[10px] sm:text-[11px] text-[var(--text-muted)] tracking-tight truncate">
+                  Financial Operations & Reversal Console
+                </div>
               </div>
-              <div className="hidden sm:block text-[10px] sm:text-[11px] text-[var(--text-muted)] tracking-tight truncate">
-                Financial Operations & Reversal Console
-              </div>
-            </div>
+            </button>
           </div>
 
           {/* Center: Global Transaction Search Input with Ctrl+K shortcut (Desktop) */}
@@ -710,10 +738,36 @@ export const AppShell: React.FC<AppShellProps> = ({ children }) => {
       {/* 4. Breadcrumb Bar */}
       <div className="bg-[var(--canvas-subdued)] border-b border-[var(--surface-border-subtle)] text-[11px] sm:text-[12px] py-1.5 px-3 sm:px-4 select-none">
         <div className="max-w-7xl mx-auto flex items-center gap-1 sm:gap-1.5 text-[var(--text-muted)] min-w-0">
-          <span className="hidden sm:inline">SMARTREVERSAL</span>
+          {canGoBack && (
+            <button
+              type="button"
+              onClick={navigateBack}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--surface)] hover:bg-[var(--surface-border-subtle)] border border-[var(--surface-border)] text-[var(--text-primary)] hover:text-[var(--primary)] transition-colors cursor-pointer mr-1 shrink-0"
+              title="Go back to previous view"
+              aria-label="Back to previous view"
+            >
+              <ArrowLeft className="w-3 h-3 shrink-0" />
+              <span>Back</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setActiveView('dashboard')}
+            className="hidden sm:inline font-semibold hover:text-[var(--primary)] transition-colors cursor-pointer"
+            title="Go to Operations Dashboard (Home)"
+          >
+            SMARTREVERSAL
+          </button>
           <ChevronRight className="hidden sm:inline w-3.5 h-3.5 shrink-0" />
-          <span className="hidden xs:inline">Banking Operations</span>
-          <span className="xs:hidden">Ops</span>
+          <button
+            type="button"
+            onClick={() => setActiveView('dashboard')}
+            className="hover:text-[var(--primary)] transition-colors cursor-pointer"
+            title="Go to Operations Dashboard (Home)"
+          >
+            <span className="hidden xs:inline">Banking Operations</span>
+            <span className="xs:hidden">Ops</span>
+          </button>
           <ChevronRight className="w-3.5 h-3.5 shrink-0" />
           <strong className="text-[var(--text-primary)] font-semibold truncate">{getBreadcrumb()}</strong>
           <span className="hidden md:inline ml-auto font-mono-financial text-[11px] shrink-0">

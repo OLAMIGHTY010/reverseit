@@ -13,11 +13,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [density, setDensityState] = useState<DensityMode>('comfortable');
   const [role, setRole] = useState<Role>('ANALYST_MAKER');
   const [environment, setEnvironment] = useState<EnvironmentMode>('SIMULATED_SANDBOX');
-  const [activeView, setActiveView] = useState<string>('dashboard');
+  const [activeView, setActiveViewState] = useState<string>('dashboard');
+  const [viewHistory, setViewHistory] = useState<string[]>([]);
+  const [customerStep, setCustomerStepState] = useState<string>('S1_REPORT_PROBLEM');
+  const [customerHistory, setCustomerHistory] = useState<string[]>([]);
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [sessionTimeoutOpen, setSessionTimeoutOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
+
+  const setActiveView = (view: string) => {
+    if (view !== activeView) {
+      setViewHistory((prev) => [...prev, activeView]);
+      setActiveViewState(view);
+    }
+  };
+
+  const navigateBack = () => {
+    if (viewHistory.length > 0) {
+      const prevView = viewHistory[viewHistory.length - 1];
+      setViewHistory((prev) => prev.slice(0, -1));
+      setActiveViewState(prevView);
+    } else if (activeView !== 'dashboard') {
+      setActiveViewState('dashboard');
+    }
+  };
+
+  const canGoBack = viewHistory.length > 0 || activeView !== 'dashboard';
+
+  const setCustomerStep = (step: string) => {
+    if (step !== customerStep) {
+      setCustomerHistory((prev) => [...prev, customerStep]);
+      setCustomerStepState(step);
+    }
+  };
+
+  const navigateBackCustomer = () => {
+    if (customerHistory.length > 0) {
+      const prevStep = customerHistory[customerHistory.length - 1];
+      setCustomerHistory((prev) => prev.slice(0, -1));
+      setCustomerStepState(prevStep);
+    } else if (customerStep !== 'S1_REPORT_PROBLEM') {
+      setCustomerStepState('S1_REPORT_PROBLEM');
+    }
+  };
+
+  const goCustomerHome = () => {
+    setCustomerStepState('S1_REPORT_PROBLEM');
+    setCustomerHistory([]);
+  };
+
+  const canGoBackCustomer = customerHistory.length > 0 || customerStep !== 'S1_REPORT_PROBLEM';
 
   // Portal mode: customer vs staff
   const [portalMode, setPortalModeState] = useState<PortalMode>(() => {
@@ -137,6 +183,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         logoutStaff,
         activeView,
         setActiveView,
+        viewHistory,
+        navigateBack,
+        canGoBack,
+        customerStep,
+        setCustomerStep,
+        customerHistory,
+        navigateBackCustomer,
+        goCustomerHome,
+        canGoBackCustomer,
         globalSearchOpen,
         setGlobalSearchOpen,
         sessionTimeoutOpen,
