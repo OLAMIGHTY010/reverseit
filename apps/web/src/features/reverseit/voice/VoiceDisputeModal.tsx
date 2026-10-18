@@ -284,45 +284,56 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
       role="dialog"
       aria-modal="true"
       aria-labelledby="voice-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-start sm:items-center justify-center p-2 sm:p-4 bg-slate-950/75 backdrop-blur-sm overflow-y-auto animate-in fade-in duration-200"
     >
-      <div className="bg-[var(--surface)] border border-[var(--surface-border)] rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[92vh]">
+      <div className="bg-[var(--surface)] border border-[var(--surface-border)] rounded-2xl shadow-2xl max-w-2xl w-full flex flex-col max-h-[92vh] sm:max-h-[88vh] overflow-hidden my-auto shrink-0">
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-[var(--surface-border)] bg-[var(--canvas-subdued)] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center justify-center shadow-xs">
+        <div className="px-4 py-3 sm:px-5 sm:py-3.5 border-b border-[var(--surface-border)] bg-[var(--canvas-subdued)] flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 flex items-center justify-center shadow-xs shrink-0">
               <Languages className="w-5 h-5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h3 id="voice-modal-title" className="text-[16px] font-bold text-[var(--text-primary)]">
+                <h3 id="voice-modal-title" className="text-[15px] sm:text-[16px] font-bold text-[var(--text-primary)] truncate">
                   Voice Dispute Lodgement
                 </h3>
-                <span className="text-[10px] font-mono-financial font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300">
+                <span className="text-[9px] sm:text-[10px] font-mono-financial font-extrabold uppercase px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 shrink-0">
                   Multilingual AI
                 </span>
               </div>
-              <p className="text-[12px] text-[var(--text-muted)]">
+              <p className="text-[11px] sm:text-[12px] text-[var(--text-muted)] truncate">
                 Speak freely in your native language. Our AI will listen, translate, and verify your details.
               </p>
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2 shrink-0 ml-2">
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--surface)] border border-[var(--surface-border-subtle)] hover:border-emerald-400 text-[10px] font-bold text-[var(--text-secondary)] shadow-xs transition-all shrink-0"
+              title="Configure Voice Engines (Studio Native, Azure F0, YarnGPT)"
+            >
+              <Settings className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+              <span className="hidden sm:inline">{VOICE_ENGINES[engineConfig.engine].name.split(' ')[0]}</span>
+              <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 font-extrabold uppercase">
+                {VOICE_ENGINES[engineConfig.engine].badge.split('•')[0].trim()}
+              </span>
+            </button>
+
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-full text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-hover)] transition-colors shrink-0"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
-        {/* Language Selector Bar */}
-        <div className="px-4 py-2.5 bg-[var(--surface)] border-b border-[var(--surface-border-subtle)] flex items-center justify-between gap-2 overflow-x-auto text-[12px]">
-          <div className="flex items-center gap-1.5 overflow-x-auto">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)] shrink-0 mr-1">
-              Language:
-            </span>
+        {/* Consolidated Language & Sound Control Bar */}
+        <div className="px-4 py-2 bg-[var(--surface)] border-b border-[var(--surface-border-subtle)] flex items-center justify-between gap-2 overflow-x-auto text-[12px] shrink-0">
+          <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
             {(Object.keys(SUPPORTED_LANGUAGES) as SupportedLanguage[]).map((langKey) => {
               const l = SUPPORTED_LANGUAGES[langKey];
               const isSelected = selectedLanguage === langKey;
@@ -331,10 +342,10 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
                   key={langKey}
                   onClick={() => {
                     setSelectedLanguage(langKey);
-                    window.speechSynthesis?.cancel();
+                    stopVoice();
                   }}
                   className={clsx(
-                    'px-3 py-1 rounded-full text-[12px] font-bold flex items-center gap-1.5 shrink-0 transition-all',
+                    'px-2.5 py-1 rounded-full text-[11px] sm:text-[12px] font-bold flex items-center gap-1.5 shrink-0 transition-all',
                     isSelected
                       ? 'bg-emerald-600 text-white shadow-xs'
                       : 'bg-[var(--canvas-subdued)] border border-[var(--surface-border-subtle)] text-[var(--text-secondary)] hover:border-emerald-400'
@@ -346,31 +357,24 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
               );
             })}
           </div>
-        </div>
 
-        {/* Voice Clarity & Sound Check Bar */}
-        <div className="px-4 py-2 bg-emerald-50/60 dark:bg-emerald-950/40 border-b border-[var(--surface-border-subtle)] flex items-center justify-between gap-3 text-[11px] overflow-x-auto">
-          <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 pl-2 border-l border-[var(--surface-border-subtle)]">
             <button
               onClick={handleSoundCheck}
-              className="px-2.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center gap-1.5 shadow-xs transition-all active:scale-95"
+              className="px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800 text-[11px] font-bold flex items-center gap-1.5 shadow-xs transition-all active:scale-95 shrink-0"
               title="Test the crystal clear pronunciation of the selected language"
             >
-              <Volume2 className={clsx('w-3.5 h-3.5', isAiSpeaking && 'animate-bounce')} />
-              <span>Test Clear Voice 🔊</span>
+              <Volume2 className={clsx('w-3.5 h-3.5', isAiSpeaking && 'animate-bounce text-emerald-600')} />
+              <span>Test Voice 🔊</span>
             </button>
 
-            <span className="text-[10px] text-[var(--text-muted)] font-medium hidden sm:inline">
-              Pacing:
-            </span>
-
             {/* Cadence Pills */}
-            <div className="flex items-center bg-[var(--surface)] border border-[var(--surface-border-subtle)] rounded-full p-0.5 text-[10px] font-bold">
+            <div className="hidden md:flex items-center bg-[var(--canvas-subdued)] border border-[var(--surface-border-subtle)] rounded-full p-0.5 text-[10px] font-bold shrink-0">
               {(
                 [
-                  { id: 'ultra-clear', label: '0.85x Clear' },
-                  { id: 'natural', label: '0.92x Natural' },
-                  { id: 'brisk', label: '1.0x Normal' },
+                  { id: 'ultra-clear', label: '0.85x' },
+                  { id: 'natural', label: '0.92x' },
+                  { id: 'brisk', label: '1.0x' },
                 ] as const
               ).map((mode) => (
                 <button
@@ -388,49 +392,29 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
               ))}
             </div>
           </div>
-
-          {/* Engine Selector & Free Cloud API Settings Button */}
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--surface)] border border-[var(--surface-border-subtle)] hover:border-emerald-400 text-[10px] font-bold text-[var(--text-secondary)] shadow-xs transition-all"
-              title="Configure Free Voice Engines (Studio Native, Azure F0, YarnGPT)"
-            >
-              <Settings className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-              <span>{VOICE_ENGINES[engineConfig.engine].name.split(' ')[0]}</span>
-              <span className="text-[9px] px-1 py-0.2 rounded bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-300 font-extrabold uppercase">
-                {VOICE_ENGINES[engineConfig.engine].badge.split('•')[0].trim()}
-              </span>
-            </button>
-
-            <div className="hidden md:flex items-center gap-1.5 text-[10px] text-emerald-800 dark:text-emerald-300 font-mono-financial">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>100% Vol • Boosted</span>
-            </div>
-          </div>
         </div>
 
         {/* Real-Time Mandatory Slot Tracker */}
-        <div className="px-4 py-2.5 bg-slate-900 text-white flex items-center justify-between text-[11px] font-mono-financial overflow-x-auto">
-          <div className="flex items-center gap-2">
-            <span className="text-zinc-400 font-sans uppercase font-bold text-[10px] tracking-wider">
+        <div className="px-4 py-1.5 sm:py-2 bg-slate-900 text-white flex items-center justify-between text-[11px] font-mono-financial overflow-x-auto shrink-0">
+          <div className="flex items-center gap-2 overflow-x-auto py-0.5">
+            <span className="text-zinc-400 font-sans uppercase font-bold text-[9px] sm:text-[10px] tracking-wider shrink-0">
               Dispute Slots:
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 overflow-x-auto">
               {slotPills.map(({ key, label, value }) => (
                 <div
                   key={key}
                   className={clsx(
-                    'px-2 py-0.5 rounded flex items-center gap-1 text-[11px] transition-all',
+                    'px-2 py-0.5 rounded flex items-center gap-1 text-[10px] sm:text-[11px] shrink-0 transition-all',
                     value
                       ? 'bg-emerald-950 text-emerald-300 border border-emerald-500 font-bold'
                       : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
                   )}
                 >
                   {value ? (
-                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
                   ) : (
-                    <div className="w-2 h-2 rounded-full bg-zinc-500" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-zinc-500 shrink-0" />
                   )}
                   <span>{label}:</span>
                   <span className={value ? 'text-white' : 'italic text-zinc-500'}>
@@ -443,7 +427,7 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
 
           <button
             onClick={handleReset}
-            className="text-zinc-400 hover:text-white flex items-center gap-1 text-[10px] ml-2 shrink-0"
+            className="text-zinc-400 hover:text-white flex items-center gap-1 text-[10px] ml-2 shrink-0 px-2 py-0.5 rounded hover:bg-zinc-800 transition-colors"
           >
             <RotateCcw className="w-3 h-3" /> Reset
           </button>
@@ -504,9 +488,9 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
         </div>
 
         {/* Live Audio Input & Waveform Control Area */}
-        <div className="p-5 border-t border-[var(--surface-border)] bg-[var(--surface)] space-y-4">
+        <div className="p-3.5 sm:p-4 border-t border-[var(--surface-border)] bg-[var(--surface)] space-y-2.5 shrink-0">
           {/* Active Speaking / Listening Banner */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between min-h-[22px]">
             <div className="flex items-center gap-2">
               {isRecording ? (
                 <div className="flex flex-col text-rose-600 font-bold text-[12px]">
@@ -526,7 +510,7 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
                   <span>SmartReversal Advisor is speaking in {langInfo.nativeName}...</span>
                 </div>
               ) : (
-                <span className="text-[12px] text-[var(--text-muted)]">
+                <span className="text-[11px] sm:text-[12px] text-[var(--text-muted)]">
                   Tap the microphone to speak or click a language preset below
                 </span>
               )}
@@ -535,7 +519,7 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
             {isAiSpeaking && (
               <button
                 onClick={stopVoice}
-                className="text-[11px] text-[var(--text-muted)] hover:text-rose-600 flex items-center gap-1"
+                className="text-[11px] text-[var(--text-muted)] hover:text-rose-600 flex items-center gap-1 font-semibold"
               >
                 <VolumeX className="w-3.5 h-3.5" /> Stop Voice
               </button>
@@ -543,31 +527,31 @@ export const VoiceDisputeModal: React.FC<VoiceDisputeModalProps> = ({
           </div>
 
           {/* Central Pulsating Mic Button */}
-          <div className="flex flex-col items-center justify-center py-1">
+          <div className="flex flex-col items-center justify-center py-0.5">
             <button
               onClick={handleToggleRecord}
               className={clsx(
-                'relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 shadow-xl focus:outline-none',
+                'relative w-16 h-16 sm:w-18 sm:h-18 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg focus:outline-none',
                 isRecording
-                  ? 'bg-rose-600 text-white scale-110 ring-8 ring-rose-200 dark:ring-rose-950 animate-pulse'
+                  ? 'bg-rose-600 text-white scale-105 ring-6 ring-rose-200 dark:ring-rose-950 animate-pulse'
                   : 'bg-emerald-600 hover:bg-emerald-700 text-white hover:scale-105 active:scale-95'
               )}
               aria-label={isRecording ? 'Stop recording' : 'Start voice recording'}
             >
-              {isRecording ? <MicOff className="w-9 h-9" /> : <Mic className="w-9 h-9" />}
+              {isRecording ? <MicOff className="w-7 h-7 sm:w-8 sm:h-8" /> : <Mic className="w-7 h-7 sm:w-8 sm:h-8" />}
 
               {/* Decorative Audio Waves */}
               {isRecording && (
                 <span className="absolute -inset-2 rounded-full border-2 border-rose-400 animate-ping opacity-75 pointer-events-none" />
               )}
             </button>
-            <span className="text-[11px] font-bold text-[var(--text-secondary)] mt-2">
+            <span className="text-[10px] sm:text-[11px] font-bold text-[var(--text-secondary)] mt-1.5">
               {isRecording ? 'Tap to Stop' : `Tap to Speak in ${langInfo.nativeName}`}
             </span>
           </div>
 
           {/* Quick Demo Voice Presets */}
-          <div className="space-y-1.5 pt-1">
+          <div className="space-y-1 pt-0.5">
             <div className="flex items-center justify-between text-[11px] text-[var(--text-muted)] font-semibold">
               <span className="flex items-center gap-1">
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Test Conversational Voice Presets:
